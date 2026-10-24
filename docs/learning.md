@@ -325,6 +325,25 @@ başlattığında açık** (varsayılan kapalı). twist_mux'ta 20: teleop (100) 
 batarya kilidi (50) onu ezer; altındaki köprü/ESP32/E-stop/tampon zinciri
 aynen kalır.
 
+### 6d-1 ✅: politika kapısı (`policy_gate`, 2026-10-24)
+`robot_learning/gate.py` (ROS'suz) + `policy_gate` düğümü; twist_mux'ta yeni
+girdi `policy` (`cmd_vel_policy`, öncelik **20**: Nav2'nin üstünde, batarya
+kilidi 50 ve teleop 100'ün altında). Politika `policy/cmd`'ye `TwistStamped`
+yayınlar — **damga, komutun hesaplandığı gözleminki**.
+- **Varsayılan kapalı**, hiçbir şey yayınlamaz. `~/arm` (`PolicyArm.srv`:
+  alan `map`'te JSON köşe listesi + süre bütçesi), `~/disarm`, `~/state`.
+- Açıkken: tavan 0.3 m/s / 0.8 rad/s, ivme 0.5 m/s² / 2 rad/s²; komut
+  > 0.3 s ya da gözlemi > 0.5 s eskiyse **sıfır** (twist_mux'ı tutar); politika
+  2 s susarsa **susar** (Nav2'ye döner); alan + 1 m dışı, sıkışma
+  (`jam_monitor`) ya da bütçe sonu → **kapanır** (nedeniyle).
+- ⚠️ Çit `map`'te: NEO-6M'le robotun kendi tahmini metrelerce kayık olabilir —
+  kaçan bir politikayı yakalar, 50 cm geniş biçeni değil.
+- **Ölçülen** (`test_policy_gate_stack.py`, gerçek mux + köprü + ESP32 sim,
+  hep tam gaz isteyen sahte politika): kapalıyken robot kıpırdamadı; açıkken
+  `/cmd_vel` tam **0.30**; gözlem 1 s bayatlayınca durdu (kapı açık kaldı);
+  çit x = 3.0'da **3.03 m**'de kapandı ve durdu. `test_gate.py`: kuralların
+  her biri.
+
 ## Sonra: politika robota nasıl takılır
 Algoritma seçilince (adaylar: ACT, Diffusion Policy — ikisi de kamera +
 durum → aksiyon dizisi) öğrenilen politika twist_mux'a teleop ile Nav2

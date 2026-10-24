@@ -1,0 +1,9 @@
+# Arm robot_learning's policy_gate (docs/learning.md 6d): from now until
+# budget_s runs out the policy's commands may drive, inside `area`.
+#   area: JSON list of [x, y] in `map` — the polygon the robot must stay in
+#         (grown by the gate's margin_m); usually the mission's area.
+string area
+float64 budget_s
+---
+bool success
+string message

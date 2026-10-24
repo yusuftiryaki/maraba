@@ -44,6 +44,14 @@ twist_mux:
         # stopped anyway.
         timeout: 0.5
         priority: 100
+      # A learned policy, AFTER robot_learning's policy_gate (docs/learning.md
+      # 6d). Above Nav2 so an armed skill drives; BELOW the battery lock (50)
+      # and teleop (100): a flat battery or a person always wins. Silent
+      # unless the gate is armed, so Nav2 is untouched the rest of the time.
+      policy:
+        topic: cmd_vel_policy
+        timeout: 0.5
+        priority: 20
       # Nav2's controller and recoveries, AFTER the localization gate.
       navigation:
         topic: cmd_vel_nav_gated

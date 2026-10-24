@@ -22,6 +22,7 @@ setup(
             "episode_recorder = robot_learning.recorder_node:main",
             "image_compressor = robot_learning.image_compressor:main",
             "episode_export = robot_learning.export:main",
+            "policy_gate = robot_learning.policy_gate_node:main",
         ],
     },
 )

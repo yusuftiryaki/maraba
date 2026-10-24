@@ -325,6 +325,16 @@ def generate_launch_description():
                          "split_s": ParameterValue(episode_split_s, value_type=int),
                          "use_sim_time": use_sim_time}],
         ),
+        # The learned policy's gate (docs/learning.md 6d): disarmed by default,
+        # publishing nothing; twist_mux input "policy" (priority 20).
+        Node(
+            package="robot_learning",
+            executable="policy_gate",
+            name="policy_gate",
+            output="screen",
+            condition=IfCondition(use_learning),
+            parameters=[{"use_sim_time": use_sim_time}],
+        ),
         Node(
             package="robot_learning",
             executable="image_compressor",
