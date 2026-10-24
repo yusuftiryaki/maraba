@@ -61,9 +61,18 @@ class Watcher(Node):
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(String, "/mission_runner/status", self._on_status, latched)
         self.create_subscription(Odometry, "/ground_truth", self._on_truth, 10)
+        # jam_monitor's verdicts (rising edges): an honest coverage run must
+        # have NONE — a guard that fires on a NEO-6M is worse than none.
+        self.jams = []
+        self.create_subscription(String, "/jam_monitor/state", self._on_jam, latched)
 
     def _on_status(self, message):
         self.status = json.loads(message.data)
+
+    def _on_jam(self, message):
+        state = json.loads(message.data)
+        if state["jammed"]:
+            self.jams.append(f"{state['kind']}: {state['detail']}")
 
     def _on_truth(self, message):
         p = message.pose.pose.position
@@ -155,8 +164,9 @@ def run_mission(site_nav2_stack, tmp_path, sim_args, mission_params, anchor="cha
                 json.dump({"track": watcher.track, "lawn": LAWN}, handle)
         print(f"coverage run ({' '.join(sim_args) or 'NEO-6M GPS'}, anchor {anchor}): "
               f"{watcher.status['total']} waypoints, skipped {watcher.status['skipped']}, "
-              f"{elapsed:.0f} s, coverage {coverage:.1%}, overrun {overrun:.2f} m")
-        return coverage, overrun, watcher.status
+              f"{elapsed:.0f} s, coverage {coverage:.1%}, overrun {overrun:.2f} m, "
+              f"jams {watcher.jams}")
+        return coverage, overrun, dict(watcher.status, jams=watcher.jams)
     finally:
         watcher.destroy_node()
         log.close()
@@ -173,6 +183,7 @@ def test_coverage_with_a_quiet_gps(site_nav2_stack, tmp_path):
     """
     coverage, overrun, status = run_mission(site_nav2_stack, tmp_path, QUIET_GPS,
                                             {"overlap": 0.2})
+    assert status["jams"] == [], f"false jam alarms: {status['jams']}"
     assert status["skipped"] == []
     assert coverage >= 0.92, f"only {coverage:.1%} of the lawn was cut"
     assert overrun <= 0.15, f"cut {overrun:.2f} m outside the lawn"
@@ -192,3 +203,6 @@ def test_coverage_with_the_neo6m_gps(site_nav2_stack, tmp_path):
     """
     coverage, overrun, status = run_mission(site_nav2_stack, tmp_path, (), {"overlap": 0.2})
     assert status["state"] == "DONE"
+    # jam.py's whole point: NO alarms from a NEO-6M on an honest run (the
+    # map->odom guard it replaced fired 273 times here).
+    assert status["jams"] == [], f"false jam alarms under NEO-6M: {status['jams']}"

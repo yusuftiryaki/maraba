@@ -160,6 +160,10 @@ class MissionRunner(Node):
         self.create_subscription(String, f"{supervisor}/state", self._on_supervisor, latched)
         self._detected = []             # (x, y, r) in `map`
         self.create_subscription(String, p("detected_topic").value, self._on_detected, latched)
+        # jam_monitor: the wheels lying (docs/missions.md, "Patinaj sonrası
+        # alan dışında biçme"). Not running = never jammed.
+        self.create_subscription(String, "jam_monitor/state", self._on_jam, latched)
+        self._jammed = False
         self.create_service(StartMission, "~/start", self._on_start)
         self.create_service(Trigger, "~/pause", self._command(self._policy.pause))
         self.create_service(Trigger, "~/resume", self._command(self._policy.resume))
@@ -197,6 +201,32 @@ class MissionRunner(Node):
 
     def _on_detected(self, message: String) -> None:
         self._detected = [(d["x"], d["y"], d["radius"]) for d in json.loads(message.data)]
+
+    def _on_jam(self, message: String) -> None:
+        """A jam: odometry is lying, so the leg in flight — driven in `odom`,
+        its target converted through a map->odom the EKF is now swinging — is
+        stale. Stop it, restart the odom chain from `map`, and count it as a
+        failed leg: retried, then skipped (a rock that holds the robot twice
+        is in the way). ⚠️ CI, 2026-10-18: without this a robot whose wheels
+        turned against a rock mowed rows 3 m outside the lawn."""
+        state = json.loads(message.data)
+        was, self._jammed = self._jammed, bool(state.get("jammed"))
+        if not self._jammed or was or self._policy.state != State.RUNNING:
+            return
+        token = self._policy.in_flight
+        self.get_logger().warn(f"jammed ({state.get('kind')}: {state.get('detail')}) — "
+                               f"stopping waypoint {self._policy.progress.index}, "
+                               "re-anchoring the odom chain")
+        self._targets = {}
+        self._cutting = False
+        self._reverse_pub.publish(Twist())
+        if token is None:
+            return
+        self._leg = None
+        handle = self._handles.pop(token, None)
+        if handle is not None:
+            handle.cancel_goal_async()
+        self._run(self._policy.goal_result(token, Result.ABORTED, self._now()))
 
     def _on_supervisor(self, message: String) -> None:
         self._run(self._policy.supervisor_state(message.data, self._now()))

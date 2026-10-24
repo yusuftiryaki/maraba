@@ -180,6 +180,8 @@ STACK_PATTERNS = (
     "lib/robot_missions/site_map_server",
     # sends navigate_to_pose goals: an orphan would drive the next stack
     "lib/robot_missions/mission_runner",
+    # latches jam_monitor/state: an orphan's verdict would stop the next runner
+    "lib/robot_missions/jam_monitor",
     # holds the web port: an orphan makes the next web test bind fail
     "lib/robot_missions/web_ui",
     # publishes /detected_dock_pose from the camera

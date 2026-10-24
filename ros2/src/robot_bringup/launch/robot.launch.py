@@ -334,6 +334,16 @@ def generate_launch_description():
             parameters=[{"use_sim_time": use_sim_time}],
         ),
 
+        # Are the wheels lying? (jam.py) — mission_runner stops a leg on a jam.
+        # Pure listener: wheel odometry vs gyro vs raw GPS.
+        Node(
+            package="robot_missions",
+            executable="jam_monitor",
+            name="jam_monitor",
+            output="screen",
+            parameters=[{"use_sim_time": use_sim_time}],
+        ),
+
         # Missions on the site: ~/start, ~/pause, ~/resume, ~/abort, ~/status.
         # Only with Nav2 — it is what drives the waypoints.
         Node(

@@ -554,44 +554,59 @@ karşı süpürüldü: en kötü **1.65°**. (İlk sürüm dönerken ölçüyord
 makinede 11° okudu — hata değil, tf + HTTP gecikmesiydi.) Tarayıcıda da uçtan uca: iz → aday rota, nokta → etiket
 "kuyu" + yarıçap → kaydet → robot kabul etti, `goto` listesinde çıktı.
 
-## ⚠️ Patinaj sonrası alan dışında biçme (2026-10-18) — sim düzeltildi, robot tarafı AÇIK
-CI'da `test_mission_rock` iki kez düştü ("taşa 14 / 11 kez çarptı"); uçuş
-kaydı (CI_BAG) asıl şeyi gösterdi: **robot alanın 3 m dışında şerit biçti.**
-1. **Sim (düzeltildi):** taşa tam temastaki robotun yerinde dönmesi bile
-   reddediliyordu (`world._collides`, `<=`). Tekerlekler döndü, odometri
-   ~210° dönüş bildirdi, robot dönmedi; bayrak temas sınırında titredi (bir
-   temas = 11–14 "çarpışma"). Artık yalnız engelin İÇİNE giren adım
-   reddediliyor; dönüş, yüzey boyunca kayma, geri çekilme serbest
-   (`test_world.py`). ⚠️ İlk düzeltme yetmedi (2026-10-24, CI'da 19
-   "çarpışma", 1.08 m taşma): taşa YANDAN değen robotun yerinde dönüşünde
-   motor gecikmesi küçük bir ileri hız bırakıyordu, adım içeri giriyordu ve
-   dönüşle birlikte reddediliyordu. Artık içeri giren adımda yalnız öteleme
-   reddedilir, dönüş uygulanır. `test_mission_rock` da artık temasları sayar
-   (aralarında ≥ 1 s), 20 ms'lik kenarları değil.
-2. **Robot (AÇIK güvenlik boşluğu):** EKF `map`'i doğru tutmak için
-   map→odom'u (0.2, 0.7, −14°) → (8.5, 3.5, 200°) savurdu. `mission_runner`
-   şeritleri `odom`'da sürüyor (3a kararı); 11. yol noktasını savrulmanın
-   ortasında odom'a çevirip o bayat hedefi sürdü, `anchor: chain` sonraki
-   şeritleri de ondan türetti. Robotun `map` tahmini (gerçeğe 5 cm) alan
-   dışında olduğunu söylüyordu — bakan yoktu. **Gerçekte bir taşa dayanıp
-   patinaj yapan tekerlek aynısını yapabilir.**
+## ⚠️ Patinaj sonrası alan dışında biçme (2026-10-18 → sıkışma tespiti 2026-10-24)
+CI'da `test_mission_rock` düştü; uçuş kaydı (CI_BAG) asıl şeyi gösterdi:
+**robot alanın 3 m dışında şerit biçti.** Taşa dayanan robotun tekerlekleri
+döndü, kendisi dönmedi; tekerlek odometrisi olmayan hareketi bildirdi, EKF
+`map`'i doğru tutmak için map→odom'u savurdu (0.2, 0.7, −14°) → (8.5, 3.5,
+200°), `mission_runner` şeritleri `odom`'da sürdüğü için (3a kararı) bayat
+hedefi sürdü; `anchor: chain` sonraki şeritleri de ondan türetti. Gerçekte bir
+taşa dayanıp patinaj yapan tekerlek aynısını yapar.
 
-Denenen ve **geri alınan** robot önlemi — tekrar denenmesin diye:
-- "map→odom bacak sırasında 1 m / 15°'den fazla oynarsa bacağı yenile":
-  (a) robotu durdurup oturmasını bekleyen sürüm, manyetometresiz yığında
-  sonsuza kadar bekledi (yön ancak HAREKETLE yakınsıyor; NEO-6M testi 15 dk
-  0. yol noktasında); (b) durmadan yeniden demirleyen sürüm NEO-6M'le **273
-  kez** tetiklendi, görev 900 s'de bitmedi. Gürültülü GPS'te map→odom'un
-  oynaması normal: tek başına "odometri bozuldu" sinyali değil.
-- Alan çiti (map pozu alan dışında → dur) de çözüm değil: robotun `map`
-  tahmini GPS hatası kadar kayık, yani çit payı NEO-6M hatasından (2–5 m)
-  büyük olmalı — bu olaydaki 3 m'yi yakalamazdı.
-- Doğru yön, **odometri bozulmasına özgü** bir sinyal: tampon basılıyken
-  tekerlekler dönüyor ama GPS/`map` durmuş (sıkışma), ya da tekerlek ile
-  jiroskop yön hızında anlaşmıyor. O sinyalle bacak durdurulur, zincir
-  sıfırlanır. = A3c tuzak 3, "gerçek sıkışma tespiti". Gerçek robotta
-  manyetometre + jiroskop olacağı için bu sim yığınından daha iyi ayırt
-  edilebilir; sahadan önce yapılmalı.
+1. **Sim (düzeltildi, #28 + #29):** temastaki robotun dönüşü reddediliyordu.
+   Artık yalnız engelin içine giren ÖTELEME reddediliyor, dönüş her zaman
+   uygulanıyor; `test_mission_rock` 20 ms'lik kenarları değil temasları sayıyor.
+2. **Robot: `jam.py` + `jam_monitor` + `mission_runner` (2026-10-24).**
+   Tekerleklerin yalan söylediğini, tekerlek OLMAYAN bir şeyle karşılaştırarak
+   anlar:
+   - **dönüş:** tekerlek yön hızı ile ham jiroskop ≥ 1 s boyunca 0.3 rad/s'den
+     fazla ayrışırsa (ekf_local ikisini birden kaynaştırdığı için odom'un
+     yönünü bozan tam bu). CI olayının kendisi; **1 s**'de yakalanır.
+   - **duraksama:** 10 s'lik pencerede tekerlekler > 1 m demiş ama ham GPS
+     (uçlarda 2 s ortalama, tekerlek mesafesi AYNI taban üzerinden) bunun
+     %25'inden az gitmişse, ≥ 2 s sürerse. Ham GPS bilerek: `/gps/filtered`
+     EKF'tir, denetlenen tekerlek odometrisini zaten içerir.
+   - **tepki:** bacak iptal, robot durur, odom zinciri `map`'ten yeniden
+     başlar, bacak başarısız sayılır (tekrar, sonra atla). **İleri yönlü
+     duraksama tamponun kaçırdığı bir temastır:** `site_map_server` onu
+     tampon basması gibi kaydeder (robotun önüne tespit) → runner geri
+     çekilir, şeritler etrafından kesilir. ⚠️ Bu olmadan (CI, 2026-10-24)
+     runner bacakları taşa geri yolladı; robot dayalı kaldığı için yeni
+     sıkışma olayı doğmadı, her bacak 90 s'lik bütçesini tüketti.
+   - **Ölçülen (sentetik, `test_jam.py`):** NEO-6M (1 m gürültü + 2 m
+     gezinme) altında 10 dk'lık dürüst şeritler × 10 tohum: **0 alarm**.
+     Bedeli: 1 m gürültüde gerçek bir duraksama **12–38 s**'de yakalanır
+     (uçların ortalaması ~0.45 m saçılır). İlk tasarım (6 s pencere, tüm
+     pencerenin tekerlek mesafesi — GPS tabanı ise 4 s'ydi) dürüst sürüşte
+     tohum başına 37–73 kez alarm verdi.
+   - Kabul (sim, `ci.sh mission`): `test_mission_jam.py` — şeridin üstünde,
+     **tamponun görmediği** bir taş (`bumper_from_obstacles:=false`; tampon
+     kenarının altında kalan taş, kök): ölçülen 2 sıkışma (tekerlek 2.1 m /
+     GPS 0.05 m), 2 şerit atlandı, görev DONE, **taşma 0.00 m**, %75.9;
+     sıkışma tespite dönünce: **1 sıkışma, 0 atlama, %82.4 / %77.5, 0 m**.
+     Kaplama testleri sessiz ve NEO-6M'le **sıfır** sıkışma olayı.
+     ⚠️ İlk test taşı şeride YANDAN koymuştu (tamponun ±60°'si dışında):
+     yuvarlak robotta o bant ~8 cm, şerit taşa 0.59 m'den geçiyordu (temas
+     0.60) — CI'da robot hiç değmedi. Önden temas kesin; onu sıkışma yapan
+     tamponun yokluğu.
+
+Denenip **geri alınan** (tekrar denenmesin): "map→odom bacak sırasında
+1 m / 15°'den fazla oynarsa bacağı yenile". Durup bekleyen sürüm
+manyetometresiz yığında sonsuza kadar bekledi (yön ancak hareketle
+yakınsıyor); durmadan yeniden demirleyen sürüm NEO-6M'le **273 kez**
+tetiklendi. Gürültülü GPS'te map→odom'un oynaması normal: tek başına
+bozulma sinyali değil. Alan çiti de değil: robotun `map` tahmini GPS hatası
+kadar kayık, çit payı 2–5 m olmak zorunda.
 
 ## Bilinen açıklar
 - ✅ ~~İstasyon iki yerde~~ — **3b'de kapandı** (aşağıda).

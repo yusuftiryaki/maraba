@@ -75,6 +75,7 @@ class World:
         self.node.create_service(Trigger, "battery_supervisor/resume", self._resume,
                                  callback_group=group)
         self._state = self.node.create_publisher(String, "battery_supervisor/state", LATCHED)
+        self._jam = self.node.create_publisher(String, "jam_monitor/state", LATCHED)
         ActionServer(self.node, NavigateToPose, "navigate_to_pose", self._execute,
                      cancel_callback=lambda _goal: CancelResponse.ACCEPT,
                      callback_group=group)
@@ -93,6 +94,10 @@ class World:
 
     def supervisor(self, phase):
         self._state.publish(String(data=phase))
+
+    def jam(self, jammed, kind="stall"):
+        self._jam.publish(String(data=json.dumps(
+            {"jammed": jammed, "kind": kind if jammed else None, "detail": "test"})))
 
     def cancel_all(self):
         """What battery_supervisor's CANCEL_MISSIONS does: a zero GoalInfo."""
@@ -343,3 +348,24 @@ def test_pause_and_resume(harness):
     assert h.trigger("resume").success
     h.wait(state_is(h, "DONE"), what="DONE")
     assert h.world.goals == [(0.0, 0.0), (0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
+
+
+def test_a_jam_stops_the_leg_and_counts_it_as_failed(harness):
+    """jam_monitor says the wheels are lying: the goal in flight is canceled
+    and the waypoint is retried (a failed leg) — not left running on stale
+    odometry. CI, 2026-10-18: without this, rows 3 m outside the lawn."""
+    h = harness()
+    h.world.robot_at(0, 0)
+    h.world.supervisor("NORMAL")
+    h.world.hold = True
+    time.sleep(0.5)
+    assert h.start({"type": "route", "route": "tur", "params": {}}).accepted
+    h.wait(lambda: len(h.world.goals) >= 1, what="the first goal")
+    first = h.world.goals[0]
+    h.world.jam(True)
+    h.wait(lambda: len(h.world.goals) >= 2, what="the retried goal")
+    assert h.world.goals[1] == first, "the same waypoint, retried"
+    assert h.status["index"] == 0 and h.status["skipped"] == []
+    h.world.jam(False)                          # clears: nothing else happens
+    time.sleep(1.0)
+    assert len(h.world.goals) == 2
