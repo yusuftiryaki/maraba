@@ -120,6 +120,15 @@ class SiteMapServer(Node):
         self._to_ll = self.create_client(ToLL, "toLL")
         if p("record_contacts").value:
             self.create_subscription(Bool, "bumper", self._on_bumper, 10)
+            # A forward stall (jam_monitor) is a contact the bumper missed — a
+            # stone under its edge, a root: recorded the same way, so the
+            # runner backs off it and cuts round it. ⚠️ CI, 2026-10-24: without
+            # it the runner, told only "jammed", re-sent legs straight back
+            # into the stone and each one ran out its time budget.
+            self.create_subscription(String, "jam_monitor/state", self._on_jam,
+                                     QoSProfile(depth=1,
+                                                durability=DurabilityPolicy.TRANSIENT_LOCAL))
+            self._jammed = False
         self._frame = None               # (receive time, Image)
         if p("camera_topic").value:
             # Keep only a reference to the newest frame; it is encoded only
@@ -272,18 +281,28 @@ class SiteMapServer(Node):
 
     # --- bumper contacts ----------------------------------------------------
 
+    def _on_jam(self, message: String) -> None:
+        state = json.loads(message.data)
+        was, self._jammed = self._jammed, bool(state.get("jammed"))
+        if self._jammed and not was and state.get("kind") == "stall" and state.get("forward"):
+            self.get_logger().warn(f"forward stall ({state.get('detail')}): recording a "
+                                   "contact the bumper missed")
+            self._record_contact("forward stall")
+
     def _on_bumper(self, message: Bool) -> None:
         rising = message.data and not self._bump_was    # one record per press
         self._bump_was = message.data
-        if not rising:
-            return
+        if rising:
+            self._record_contact("bumper")
+
+    def _record_contact(self, source: str) -> None:
         if self._geometry is None:
-            self.get_logger().warn("bumper pressed before the survey map exists: not recorded")
+            self.get_logger().warn(f"{source}: before the survey map exists, not recorded")
             return
         try:
             tf = self._tf.lookup_transform("map", "base_link", Time())
         except TransformException as exc:
-            self.get_logger().warn(f"bumper pressed, no map->base_link ({exc}): not recorded")
+            self.get_logger().warn(f"{source}: no map->base_link ({exc}), not recorded")
             return
         t, q = tf.transform.translation, tf.transform.rotation
         yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
@@ -291,7 +310,7 @@ class SiteMapServer(Node):
         x, y = contact_point(t.x, t.y, yaw, p("contact_offset").value)
         item, new = self._store.add_contact(x, y, p("contact_radius").value)
         self.get_logger().warn(
-            f"bumper: {'NEW obstacle' if new else 'known obstacle again'} at "
+            f"{source}: {'NEW obstacle' if new else 'known obstacle again'} at "
             f"({item.x:.2f}, {item.y:.2f}) in map, {item.count} press(es)")
         if new:
             self._snapshot(item)

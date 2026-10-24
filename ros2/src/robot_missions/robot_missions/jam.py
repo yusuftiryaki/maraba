@@ -56,7 +56,7 @@ class JamDetector:
         self._gyro_w: Optional[Tuple[float, float]] = None
         self._turn_since: Optional[float] = None
         self._stall_since: Optional[float] = None
-        self._wheel: Deque[Tuple[float, float]] = deque()      # (t, |v|) samples
+        self._wheel: Deque[Tuple[float, float]] = deque()      # (t, v) samples, signed
         self._gps: Deque[Tuple[float, LatLon]] = deque()
         self.last: Optional[Dict] = None                        # the latest verdict
 
@@ -64,7 +64,7 @@ class JamDetector:
 
     def wheel(self, t: float, v: float, w: float) -> None:
         self._wheel_w = (t, w)
-        self._wheel.append((t, abs(v)))
+        self._wheel.append((t, v))
         self._trim(t)
 
     def gyro(self, t: float, w: float) -> None:
@@ -122,17 +122,20 @@ class JamDetector:
             return None
         t_a = sum(t for t, _ in start) / len(start)             # the averages' centres
         t_b = sum(t for t, _ in end) / len(end)
-        wheel_m = 0.0
+        wheel_m, signed_m = 0.0, 0.0
         samples = list(self._wheel)
         for (t0, v0), (t1, _) in zip(samples, samples[1:]):
             overlap = min(t1, t_b) - max(t0, t_a)
             if overlap > 0:
-                wheel_m += v0 * overlap
+                wheel_m += abs(v0) * overlap
+                signed_m += v0 * overlap
         if wheel_m < c.min_wheel_m:
             return None
         gps_m = distance_m(_mean([f for _, f in start]), _mean([f for _, f in end]))
         if gps_m < c.stall_ratio * wheel_m:
-            return {"kind": self.STALL,
+            # forward: the wheels were pushing AHEAD — something is in front
+            # (site_map_server records it like a bumper press).
+            return {"kind": self.STALL, "forward": signed_m > 0.5 * wheel_m,
                     "detail": f"wheels {wheel_m:.2f} m, GPS {gps_m:.2f} m in {t_b - t_a:.0f} s"}
         return None
 

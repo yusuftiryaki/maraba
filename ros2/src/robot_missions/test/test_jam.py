@@ -112,3 +112,12 @@ def test_stale_signals_claim_nothing():
     d.wheel(0.0, 0.0, 0.6)
     d.gyro(0.0, 0.0)
     assert d.check(5.0) is None
+
+
+def test_a_stall_says_which_way_the_wheels_were_pushing():
+    ahead = JamDetector()
+    out = run(ahead, 20.0, v=0.3, w=0.0, gyro=0.0, pos=(0, 0))
+    assert next(v for v in out if v)["forward"] is True
+    behind = JamDetector()
+    out = run(behind, 20.0, v=-0.3, w=0.0, gyro=0.0, pos=(0, 0))
+    assert next(v for v in out if v)["forward"] is False

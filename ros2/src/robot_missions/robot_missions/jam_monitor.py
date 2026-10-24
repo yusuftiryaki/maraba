@@ -3,7 +3,10 @@ sonrası alan dışında biçme").
 
     /odom (wheel odometry), imu/data_raw (gyro), gps/fix (raw GPS)   in
     jam_monitor/state (String JSON, latched, on change)             out
-        {"jammed": bool, "kind": "turn"|"stall"|null, "detail": str}
+        {"jammed": bool, "kind": "turn"|"stall"|null, "forward": bool, "detail": str}
+
+A forward stall is an obstacle ahead the bumper missed: site_map_server
+records it like a press, so mission_runner backs off it and cuts round it.
 
 mission_runner stops the leg on a jam and restarts its odom chain from `map`;
 the policy gate (6d) will listen too. Raw GPS on purpose: /gps/filtered is the
@@ -58,9 +61,10 @@ class JamMonitor(Node):
         if verdict is None:
             self._publish(False, None, "")
         else:
-            self._publish(True, verdict["kind"], verdict["detail"])
+            self._publish(True, verdict["kind"], verdict["detail"],
+                          bool(verdict.get("forward", False)))
 
-    def _publish(self, jammed: bool, kind, detail: str) -> None:
+    def _publish(self, jammed: bool, kind, detail: str, forward: bool = False) -> None:
         if self._state == (jammed, kind):
             return
         if jammed:
@@ -69,7 +73,7 @@ class JamMonitor(Node):
             self.get_logger().info("no longer jammed")
         self._state = (jammed, kind)
         self._pub.publish(String(data=json.dumps({"jammed": jammed, "kind": kind,
-                                                  "detail": detail})))
+                                                  "forward": forward, "detail": detail})))
 
 
 def main(args=None) -> None:

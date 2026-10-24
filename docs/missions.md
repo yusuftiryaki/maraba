@@ -577,7 +577,12 @@ taşa dayanıp patinaj yapan tekerlek aynısını yapar.
      %25'inden az gitmişse, ≥ 2 s sürerse. Ham GPS bilerek: `/gps/filtered`
      EKF'tir, denetlenen tekerlek odometrisini zaten içerir.
    - **tepki:** bacak iptal, robot durur, odom zinciri `map`'ten yeniden
-     başlar, bacak başarısız sayılır (tekrar, sonra atla).
+     başlar, bacak başarısız sayılır (tekrar, sonra atla). **İleri yönlü
+     duraksama tamponun kaçırdığı bir temastır:** `site_map_server` onu
+     tampon basması gibi kaydeder (robotun önüne tespit) → runner geri
+     çekilir, şeritler etrafından kesilir. ⚠️ Bu olmadan (CI, 2026-10-24)
+     runner bacakları taşa geri yolladı; robot dayalı kaldığı için yeni
+     sıkışma olayı doğmadı, her bacak 90 s'lik bütçesini tüketti.
    - **Ölçülen (sentetik, `test_jam.py`):** NEO-6M (1 m gürültü + 2 m
      gezinme) altında 10 dk'lık dürüst şeritler × 10 tohum: **0 alarm**.
      Bedeli: 1 m gürültüde gerçek bir duraksama **12–38 s**'de yakalanır
@@ -587,7 +592,8 @@ taşa dayanıp patinaj yapan tekerlek aynısını yapar.
    - Kabul (sim, `ci.sh mission`): `test_mission_jam.py` — şeridin üstünde,
      **tamponun görmediği** bir taş (`bumper_from_obstacles:=false`; tampon
      kenarının altında kalan taş, kök): ölçülen 2 sıkışma (tekerlek 2.1 m /
-     GPS 0.05 m), 2 şerit atlandı, görev DONE, **taşma 0.00 m**, %75.9.
+     GPS 0.05 m), 2 şerit atlandı, görev DONE, **taşma 0.00 m**, %75.9;
+     sıkışma tespite dönünce: **1 sıkışma, 0 atlama, %82.4 / %77.5, 0 m**.
      Kaplama testleri sessiz ve NEO-6M'le **sıfır** sıkışma olayı.
      ⚠️ İlk test taşı şeride YANDAN koymuştu (tamponun ±60°'si dışında):
      yuvarlak robotta o bant ~8 cm, şerit taşa 0.59 m'den geçiyordu (temas
