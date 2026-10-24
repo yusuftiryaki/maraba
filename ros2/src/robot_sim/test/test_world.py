@@ -222,3 +222,15 @@ def test_backing_off_from_contact_is_allowed():
     for _ in range(25):
         world.step(-RPM_FOR_1MS, -RPM_FOR_1MS, 0.02)
     assert not world.collision and world.pose.x < x - 0.2
+
+
+def test_a_turn_with_a_sliver_of_forward_speed_still_turns_against_a_rock():
+    """Motor lag leaves the wheels not quite opposite in a turn on the spot:
+    the step has a little forward motion INTO the rock. The translation is
+    refused; the turn must still happen (CI, 2026-10-24)."""
+    world = touching()
+    x, y, yaw = world.pose.x, world.pose.y, world.pose.yaw
+    for _ in range(50):
+        world.step(-RPM_FOR_1MS * 0.25, RPM_FOR_1MS * 0.35, 0.02)   # net forward + left
+    assert (world.pose.x, world.pose.y) == pytest.approx((x, y), abs=1e-9)
+    assert abs(world.pose.yaw - yaw) > 0.4, "the turn was refused with the translation"
