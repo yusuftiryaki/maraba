@@ -584,9 +584,15 @@ taşa dayanıp patinaj yapan tekerlek aynısını yapar.
      (uçların ortalaması ~0.45 m saçılır). İlk tasarım (6 s pencere, tüm
      pencerenin tekerlek mesafesi — GPS tabanı ise 4 s'ydi) dürüst sürüşte
      tohum başına 37–73 kez alarm verdi.
-   - Kabul (sim, `ci.sh mission`): `test_mission_jam.py` (taş YANDAN —
-     tampon basmaz — sıkışma yakalanmalı, alan dışı ≤ 0.15 m), kaplama
-     testleri sessiz ve NEO-6M'le **sıfır** sıkışma olayı.
+   - Kabul (sim, `ci.sh mission`): `test_mission_jam.py` — şeridin üstünde,
+     **tamponun görmediği** bir taş (`bumper_from_obstacles:=false`; tampon
+     kenarının altında kalan taş, kök): ölçülen 2 sıkışma (tekerlek 2.1 m /
+     GPS 0.05 m), 2 şerit atlandı, görev DONE, **taşma 0.00 m**, %75.9.
+     Kaplama testleri sessiz ve NEO-6M'le **sıfır** sıkışma olayı.
+     ⚠️ İlk test taşı şeride YANDAN koymuştu (tamponun ±60°'si dışında):
+     yuvarlak robotta o bant ~8 cm, şerit taşa 0.59 m'den geçiyordu (temas
+     0.60) — CI'da robot hiç değmedi. Önden temas kesin; onu sıkışma yapan
+     tamponun yokluğu.
 
 Denenip **geri alınan** (tekrar denenmesin): "map→odom bacak sırasında
 1 m / 15°'den fazla oynarsa bacağı yenile". Durup bekleyen sürüm
