@@ -7,6 +7,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/StartMission.srv"
   "srv/Episode.srv"
+  "srv/PolicyArm.srv"
 )
 
 ament_export_dependencies(rosidl_default_runtime)
