@@ -30,7 +30,7 @@ GAZEBO_TESTS=(src/robot_sim/test/test_gazebo_physics.py src/robot_sim/test/test_
 DOCK_TESTS=(src/robot_sim/test/test_docking.py)
 SWEEP_TESTS=(src/robot_sim/test/test_docking_sweep.py)
 MISSION_TESTS=(src/robot_sim/test/test_mission_coverage.py src/robot_sim/test/test_mission_dock.py
-               src/robot_sim/test/test_mission_rock.py)
+               src/robot_sim/test/test_mission_rock.py src/robot_sim/test/test_mission_jam.py)
 HEAVY=("${NAV2_TESTS[@]}" "${GAZEBO_TESTS[@]}" "${DOCK_TESTS[@]}" "${SWEEP_TESTS[@]}"
        "${MISSION_TESTS[@]}")
 

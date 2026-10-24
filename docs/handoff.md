@@ -1398,13 +1398,19 @@ kendisi yayınlıyor; gerçek sürücüleri de açmak topic için kavga ettirir.
 (`/tmp`) yazılmıştı; devcontainer rebuild'i sildi, aynı test iki kez yazıldı.
 Artık repodalar.
 
-### ⚠️ Açık güvenlik boşluğu: patinaj → alan dışında biçme (2026-10-18)
-CI kaydında robot bir taşa dayanıp tekerlek döndürünce (sim hatası, düzeltildi)
-odometri bozuldu ve `mission_runner` şeritleri **alanın 3 m dışında** biçti.
-Robot tarafı açık: gerçek bir patinaj aynısını yapabilir. Map→odom izleme
-denendi ve NEO-6M'le bozduğu için geri alındı; doğru çözüm sıkışma tespiti
-(A3c tuzak 3). Ayrıntı ve denenmeyecekler: missions.md "Patinaj sonrası alan
-dışında biçme". **Sahada misinayla görevden önce kapatılmalı.**
+### ✅ Patinaj → alan dışında biçme: sim'de kapatıldı (2026-10-24)
+CI kaydında taşa dayanan robotun tekerlekleri döndü, odometri bozuldu,
+`mission_runner` alanın 3 m dışında biçti. Sim'in temas modeli düzeltildi
+(#28, #29); robot tarafında **`jam_monitor`** tekerleği jiroskop (dönüş, 1 s)
+ve ham GPS (duraksama, 10 s pencere) ile karşılaştırıyor, `mission_runner`
+sıkışmada bacağı durdurup odom zincirini `map`'ten yeniden kuruyor.
+Ölçülen (sim): yandan sıkışma yakalandı, taşma 0 m; sessiz ve NEO-6M kaplama
+koşularında **0 yanlış alarm**. Bedeli: 1 m GPS gürültüsünde duraksama
+12–38 s'de yakalanır. Ayrıntı: missions.md "Patinaj sonrası alan dışında
+biçme". Sahada eşikler (0.3 rad/s, %25) gerçek sensörlerle yeniden ölçülmeli.
+⚠️ Kırılgan CI testi: `test_site_positions_land_where_the_gps_puts_them_all_the_way_round`
+bir kez 0.135 m (sınır 0.12) okudu; sınır, yakalaması gereken hatanın
+0.105–0.182 m aralığıyla örtüşüyor — gevşetilmedi.
 
 ## Bilinen blokerler / bekleyen alımlar
 **Güncel alım listesi ve gerekçeleri: `docs/purchase-list.md`** (2026-10-08).
