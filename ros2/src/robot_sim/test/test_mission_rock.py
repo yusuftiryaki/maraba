@@ -17,6 +17,7 @@ import json
 import math
 import os
 import subprocess
+import time
 
 import pytest
 
@@ -41,16 +42,26 @@ TIMEOUT_S = 1200.0
 
 
 class RockWatcher(Watcher):
+    """Counts CONTACTS: a rising edge of the sim's oracle that comes after at
+    least CONTACT_GAP_S without one. ⚠️ Rising edges alone counted one touch
+    as 11-19 "collisions" in CI: pressed against the rock, steps alternate
+    between refused (into it) and allowed (turning, sliding) every 20 ms."""
+
+    CONTACT_GAP_S = 1.0
+
     def __init__(self):
         super().__init__()
-        self.collisions = 0             # rising edges of the sim's oracle
-        self._colliding = False
+        self.collisions = 0
+        self._last_true = None
         self.create_subscription(Bool, "/collision_truth", self._on_collision, 10)
 
     def _on_collision(self, message):
-        if message.data and not self._colliding:
+        if not message.data:
+            return
+        now = time.monotonic()
+        if self._last_true is None or now - self._last_true > self.CONTACT_GAP_S:
             self.collisions += 1
-        self._colliding = message.data
+        self._last_true = now
 
 
 def to_sim_world(lat, lon):

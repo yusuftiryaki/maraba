@@ -125,7 +125,14 @@ class KinematicWorld:
             next_yaw = math.atan2(math.sin(yaw1), math.cos(yaw1))
 
         if self._collides(next_x, next_y):
+            # The translation is refused, the TURN is not: turning about its
+            # own centre never pushes a round robot into anything. Refusing
+            # the whole step froze the yaw whenever wheel lag left a sliver of
+            # forward speed in a turn on the spot against a rock — wheel
+            # odometry turned, the robot did not, odom broke (CI,
+            # test_mission_rock, 2026-10-24: 19 "collisions", 1.08 m overrun).
             self.collision = True
+            self.pose.yaw = next_yaw
         else:
             self.collision = False
             self.pose.x, self.pose.y, self.pose.yaw = next_x, next_y, next_yaw

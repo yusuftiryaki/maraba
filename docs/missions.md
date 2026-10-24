@@ -562,7 +562,12 @@ kaydı (CI_BAG) asıl şeyi gösterdi: **robot alanın 3 m dışında şerit bi�
    ~210° dönüş bildirdi, robot dönmedi; bayrak temas sınırında titredi (bir
    temas = 11–14 "çarpışma"). Artık yalnız engelin İÇİNE giren adım
    reddediliyor; dönüş, yüzey boyunca kayma, geri çekilme serbest
-   (`test_world.py`).
+   (`test_world.py`). ⚠️ İlk düzeltme yetmedi (2026-10-24, CI'da 19
+   "çarpışma", 1.08 m taşma): taşa YANDAN değen robotun yerinde dönüşünde
+   motor gecikmesi küçük bir ileri hız bırakıyordu, adım içeri giriyordu ve
+   dönüşle birlikte reddediliyordu. Artık içeri giren adımda yalnız öteleme
+   reddedilir, dönüş uygulanır. `test_mission_rock` da artık temasları sayar
+   (aralarında ≥ 1 s), 20 ms'lik kenarları değil.
 2. **Robot (AÇIK güvenlik boşluğu):** EKF `map`'i doğru tutmak için
    map→odom'u (0.2, 0.7, −14°) → (8.5, 3.5, 200°) savurdu. `mission_runner`
    şeritleri `odom`'da sürüyor (3a kararı); 11. yol noktasını savrulmanın
