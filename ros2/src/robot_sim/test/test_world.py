@@ -182,3 +182,43 @@ def test_the_front_bumper_presses_only_on_contact_ahead():
         yaw = math.radians(degrees)
         pose = Pose(1.0 - 0.6 * math.cos(yaw), -0.6 * math.sin(yaw), 0.0)
         assert bumper_pressed(pose, 0.4, rock) is pressed, degrees
+
+
+# --- contact (2026-10-18: one touch turned into a stuck robot and bad odometry) ---
+
+def touching():
+    obstacle = CircularObstacle(x=1.0, y=0.0, radius=0.2)
+    world = KinematicWorld(tau=1e-9, obstacles=(obstacle,), robot_radius=0.3)
+    for _ in range(200):                       # drive into it until it stops us
+        world.step(RPM_FOR_1MS, RPM_FOR_1MS, 0.02)
+    assert world.collision
+    return world
+
+
+def test_a_robot_touching_a_rock_can_still_turn_on_the_spot():
+    world = touching()
+    x, y, yaw = world.pose.x, world.pose.y, world.pose.yaw
+    for _ in range(50):                        # spin left
+        world.step(-RPM_FOR_1MS * 0.3, RPM_FOR_1MS * 0.3, 0.02)
+    assert not world.collision
+    assert (world.pose.x, world.pose.y) == pytest.approx((x, y), abs=1e-6)
+    assert abs(world.pose.yaw - yaw) > 0.5, "the turn was refused"
+
+
+def test_pushing_on_is_refused_and_reads_as_one_continuous_collision():
+    world = touching()
+    x = world.pose.x
+    flags = []
+    for _ in range(100):
+        world.step(RPM_FOR_1MS, RPM_FOR_1MS, 0.02)
+        flags.append(world.collision)
+    assert all(flags), "pushing on must stay ONE collision, not flicker"
+    assert world.pose.x == pytest.approx(x, abs=1e-9)
+
+
+def test_backing_off_from_contact_is_allowed():
+    world = touching()
+    x = world.pose.x
+    for _ in range(25):
+        world.step(-RPM_FOR_1MS, -RPM_FOR_1MS, 0.02)
+    assert not world.collision and world.pose.x < x - 0.2

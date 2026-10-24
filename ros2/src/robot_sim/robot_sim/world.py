@@ -133,11 +133,27 @@ class KinematicWorld:
         return self._meas_l, self._meas_r
 
     def _collides(self, x: float, y: float) -> bool:
-        return any(
-            math.hypot(x - obstacle.x, y - obstacle.y)
-            <= self.robot_radius + obstacle.radius
-            for obstacle in self._obstacles
-        )
+        """Would this step push INTO an obstacle? Only a step that ends inside
+        contact distance AND closer than now is refused.
+
+        ⚠️ It used to refuse any step ending at or inside contact distance —
+        so a robot touching a rock could not even turn on the spot (turning
+        keeps the centre where it is, exactly at contact). Its wheels turned,
+        wheel odometry reported ~210 deg of rotation that never happened, the
+        EKF swung map->odom to match, and the mission runner drove rows 3 m
+        outside the lawn (CI, test_mission_rock, 2026-10-18; the robot-side
+        gap is still open — docs/missions.md). It also counted ONE touch as a
+        dozen collisions: the flag flickered at exactly contact distance.
+        A round robot's turn, a slide along the surface and a back-off never
+        penetrate, so they are allowed."""
+        for obstacle in self._obstacles:
+            contact = self.robot_radius + obstacle.radius
+            after = math.hypot(x - obstacle.x, y - obstacle.y)
+            if after < contact - 1e-9:
+                now = math.hypot(self.pose.x - obstacle.x, self.pose.y - obstacle.y)
+                if after < now:
+                    return True
+        return False
 
 
 def bumper_pressed(pose, robot_radius: float, obstacles, margin: float = 0.03,
