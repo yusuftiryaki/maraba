@@ -554,6 +554,40 @@ karşı süpürüldü: en kötü **1.65°**. (İlk sürüm dönerken ölçüyord
 makinede 11° okudu — hata değil, tf + HTTP gecikmesiydi.) Tarayıcıda da uçtan uca: iz → aday rota, nokta → etiket
 "kuyu" + yarıçap → kaydet → robot kabul etti, `goto` listesinde çıktı.
 
+## ⚠️ Patinaj sonrası alan dışında biçme (2026-10-18) — sim düzeltildi, robot tarafı AÇIK
+CI'da `test_mission_rock` iki kez düştü ("taşa 14 / 11 kez çarptı"); uçuş
+kaydı (CI_BAG) asıl şeyi gösterdi: **robot alanın 3 m dışında şerit biçti.**
+1. **Sim (düzeltildi):** taşa tam temastaki robotun yerinde dönmesi bile
+   reddediliyordu (`world._collides`, `<=`). Tekerlekler döndü, odometri
+   ~210° dönüş bildirdi, robot dönmedi; bayrak temas sınırında titredi (bir
+   temas = 11–14 "çarpışma"). Artık yalnız engelin İÇİNE giren adım
+   reddediliyor; dönüş, yüzey boyunca kayma, geri çekilme serbest
+   (`test_world.py`).
+2. **Robot (AÇIK güvenlik boşluğu):** EKF `map`'i doğru tutmak için
+   map→odom'u (0.2, 0.7, −14°) → (8.5, 3.5, 200°) savurdu. `mission_runner`
+   şeritleri `odom`'da sürüyor (3a kararı); 11. yol noktasını savrulmanın
+   ortasında odom'a çevirip o bayat hedefi sürdü, `anchor: chain` sonraki
+   şeritleri de ondan türetti. Robotun `map` tahmini (gerçeğe 5 cm) alan
+   dışında olduğunu söylüyordu — bakan yoktu. **Gerçekte bir taşa dayanıp
+   patinaj yapan tekerlek aynısını yapabilir.**
+
+Denenen ve **geri alınan** robot önlemi — tekrar denenmesin diye:
+- "map→odom bacak sırasında 1 m / 15°'den fazla oynarsa bacağı yenile":
+  (a) robotu durdurup oturmasını bekleyen sürüm, manyetometresiz yığında
+  sonsuza kadar bekledi (yön ancak HAREKETLE yakınsıyor; NEO-6M testi 15 dk
+  0. yol noktasında); (b) durmadan yeniden demirleyen sürüm NEO-6M'le **273
+  kez** tetiklendi, görev 900 s'de bitmedi. Gürültülü GPS'te map→odom'un
+  oynaması normal: tek başına "odometri bozuldu" sinyali değil.
+- Alan çiti (map pozu alan dışında → dur) de çözüm değil: robotun `map`
+  tahmini GPS hatası kadar kayık, yani çit payı NEO-6M hatasından (2–5 m)
+  büyük olmalı — bu olaydaki 3 m'yi yakalamazdı.
+- Doğru yön, **odometri bozulmasına özgü** bir sinyal: tampon basılıyken
+  tekerlekler dönüyor ama GPS/`map` durmuş (sıkışma), ya da tekerlek ile
+  jiroskop yön hızında anlaşmıyor. O sinyalle bacak durdurulur, zincir
+  sıfırlanır. = A3c tuzak 3, "gerçek sıkışma tespiti". Gerçek robotta
+  manyetometre + jiroskop olacağı için bu sim yığınından daha iyi ayırt
+  edilebilir; sahadan önce yapılmalı.
+
 ## Bilinen açıklar
 - ✅ ~~İstasyon iki yerde~~ — **3b'de kapandı** (aşağıda).
 - Survey edilmemiş engel hâlâ görünmez (menzil sensörü yok, karar 8).

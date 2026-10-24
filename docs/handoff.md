@@ -1390,6 +1390,14 @@ kendisi yayınlıyor; gerçek sürücüleri de açmak topic için kavga ettirir.
 (`/tmp`) yazılmıştı; devcontainer rebuild'i sildi, aynı test iki kez yazıldı.
 Artık repodalar.
 
+### ⚠️ Açık güvenlik boşluğu: patinaj → alan dışında biçme (2026-10-18)
+CI kaydında robot bir taşa dayanıp tekerlek döndürünce (sim hatası, düzeltildi)
+odometri bozuldu ve `mission_runner` şeritleri **alanın 3 m dışında** biçti.
+Robot tarafı açık: gerçek bir patinaj aynısını yapabilir. Map→odom izleme
+denendi ve NEO-6M'le bozduğu için geri alındı; doğru çözüm sıkışma tespiti
+(A3c tuzak 3). Ayrıntı ve denenmeyecekler: missions.md "Patinaj sonrası alan
+dışında biçme". **Sahada misinayla görevden önce kapatılmalı.**
+
 ## Bilinen blokerler / bekleyen alımlar
 **Güncel alım listesi ve gerekçeleri: `docs/purchase-list.md`** (2026-10-08).
 - ✅ **ST-Link V2 klon** — **geldi (2026-10-16)**, mor alüminyum kasa. Kasa
