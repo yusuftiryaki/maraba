@@ -267,6 +267,53 @@ her duruma etiket verir (gerçekte bunu insan yapar: "müdahale" modu).
   aşağı bakan geniş açılı kamera (donanım notu, yukarıda) burada ölçülebilir:
   aynı sim'de ikinci kamera + aynı uzman, iki politikanın ölçütü yan yana.
 
+### ✅ 6c: LeRobot'a dönüştürme + Colab/Kaggle defteri (2026-10-18)
+`learning/` (ROS'suz; bulutta koşar):
+- `to_lerobot.py`: `episode_export` çıktısı → **LeRobot 0.6.1** veri seti
+  (`LeRobotDataset.create` → `add_frame` → `save_episode` → `finalize`;
+  kamera AV1 video). Durum varsayılanı **yalnız odometri + IMU** — harita/GPS
+  konumu politikaya tek sahanın koordinatlarını ezberletir, kenarı kamera
+  görmeli. Etiket: sim'de uzman (`action_expert`), gerçekte insan. Baştaki
+  görüntüsüz/etiketsiz kareler kırpılır, aradaki boşluk son değerle dolar.
+- `eval_offline.py`: ayrılmış bölümlerde `select_action` (robotun çağıracağı
+  gibi, bloklar dahil) vs etiket: sütun başına MAE + çıkarım süresi.
+  ⚠️ Açık çevrim: hata birikmesini göstermez (o 6d'de, sim'de).
+- `train_edge.ipynb`: ortam kontrolü (Python ≥ 3.12, GPU) → kurulum → zip'i
+  aç → dönüştür → eğitim/puanlama bölümlerini ayır → **ACT** eğit →
+  puanla → (isteğe bağlı) Diffusion → robota götürülecek paketi zip'le.
+  Betikleri GitHub'dan (`REPO_REF`) çeker. Veri: Colab'da Drive, Kaggle'da
+  "Dataset". `dataset.zip`: `cd ~ && python3 -m zipfile -c dataset.zip dataset/`
+  (container'da `zip` yok).
+
+Sabitlenen sürümde **gerçekten koşuldu** (dev container, CPU, karalama
+sanal ortamı; LeRobot CI'da değil, çok ağır):
+- 2 uzman bölümü (6b, seed 7–8) → dönüştürme 22 sn → LeRobot'un kendisi
+  yükledi (1288 kare, görüntü 3×240×320, durum 5, aksiyon 2) → `lerobot-train`
+  ACT 20 adım (kayıp 59 → 8.3) → kontrol noktası → `eval_offline` →
+  **defterin tamamı nbclient ile hücre hücre** (10 adım). Yani defterin
+  kodu doğru; eğitim kalitesi GPU'da, gerçek adım sayısıyla görülecek.
+
+**Kaggle'da gerçekten koşuldu** (2026-10-24, hesabın `hoverbot-edge-train-smoke`
+özel defteri, 2 bölümlük veri, 200 adım): imaj **Python 3.13**, GPU **Tesla T4**
+(16'lık grupla saniyede ~4.3 adım → 20 000 adım ≈ 80 dk), defterin tamamı
+3.5 dk'da bitti, politika paketi (190 MB) ve çevrimdışı puan indirildi.
+⚠️ Kaggle veri setine yüklenen zip'leri **kendisi açıyor** — defter artık
+zip'i de açılmış dizini de tanıyor (Kaggle'da `meta.json`'dan buluyor).
+
+Yolda bulunan tuzaklar (hepsi defterde/belgede önlendi):
+- `lerobot[dataset]` eğitim için yetmiyor: `accelerate` ister →
+  **`lerobot[dataset,training]`**. Python **≥ 3.12** şart; torch < 2.12.
+- ⚠️ **ACT'nin varsayılan bloğu 100/100: 10 Hz'de 10 saniye kör sürüş.**
+  Defter `chunk_size=20` (2 s ufuk), `n_action_steps=5` (0.5 s'de bir
+  yeniden tahmin) kullanıyor.
+- ⚠️ Diffusion'ın varsayılan `crop_shape`'i 84×84: 320×240 karemizden küçük
+  bir parça. Defterde `[224, 288]`.
+- GPU'suz ortamda `nvidia-smi` yok → ilk hücre çöküyordu (nbclient
+  koşusunda yakalandı).
+- **Model 52M parametre, paket 190 MB.** Çıkarım bu dizüstünün CPU'sunda:
+  blok hesabı ~85–130 ms, kuyruktan okuma ~3 ms (`n_action_steps=5` ile
+  çağrı ortalaması 18 ms). Pi 4 birkaç kat yavaş — 6d'de ölçülecek.
+
 ⚠️ Kinematik kameranın kenarı (6b) yapısal olarak doğru ama gerçekçi değil;
 o veriden öğrenen politika boru hattını ve yöntemi kanıtlar, sahayı değil.
 Gerçek beceri gerçek gösterimler + müdahale verisiyle gelir.

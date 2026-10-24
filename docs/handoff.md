@@ -724,8 +724,13 @@ Alanlar hem **masada haritadan çizilecek** hem **öğret-kaydet** ile kaydedile
     - ✅ 6b — kenar sim kamerasında (çim/toprak, palet rastgele) + `edge_batch`
       ile rastgele sahalarda toplu uzman bölümü. ⚠️ 5° aşağı bakan kamera
       kenar takibi için zayıf; ikinci kamera sim'de ölçülebilir.
-    - **Sıradaki: 6c** — npz → LeRobot + Colab/Kaggle defteri (BC, ACT).
-      Donanım tarafında B1 (flash) hâlâ darboğaz.
+    - ✅ 6c — `learning/to_lerobot.py` + `eval_offline.py` + `train_edge.ipynb`
+      (LeRobot 0.6.1 sabit; dev container'da uçtan uca koşuldu). ⚠️ ACT
+      varsayılan bloğu 10 sn kör sürüş → 20/5. Model 52M, paket 190 MB.
+    - **Sıradaki: 6d** — `policy_node` + `policy_gate` (twist_mux 20) + sim'de
+      kapalı çevrim + otomatik DAgger; Pi 4'te çıkarım süresi ölçümü.
+      Kullanıcının işi: `edge_batch` ile veri üret → defteri Colab/Kaggle'da
+      koş. Donanım tarafında B1 (flash) hâlâ darboğaz.
   - Sahada ilk kullanım için `robot.service`'e `site_file:=` eklenmeli
     (deployment.md adım 8).
 
