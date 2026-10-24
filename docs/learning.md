@@ -293,6 +293,13 @@ sanal ortamı; LeRobot CI'da değil, çok ağır):
   **defterin tamamı nbclient ile hücre hücre** (10 adım). Yani defterin
   kodu doğru; eğitim kalitesi GPU'da, gerçek adım sayısıyla görülecek.
 
+**Kaggle'da gerçekten koşuldu** (2026-10-24, hesabın `hoverbot-edge-train-smoke`
+özel defteri, 2 bölümlük veri, 200 adım): imaj **Python 3.13**, GPU **Tesla T4**
+(16'lık grupla saniyede ~4.3 adım → 20 000 adım ≈ 80 dk), defterin tamamı
+3.5 dk'da bitti, politika paketi (190 MB) ve çevrimdışı puan indirildi.
+⚠️ Kaggle veri setine yüklenen zip'leri **kendisi açıyor** — defter artık
+zip'i de açılmış dizini de tanıyor (Kaggle'da `meta.json`'dan buluyor).
+
 Yolda bulunan tuzaklar (hepsi defterde/belgede önlendi):
 - `lerobot[dataset]` eğitim için yetmiyor: `accelerate` ister →
   **`lerobot[dataset,training]`**. Python **≥ 3.12** şart; torch < 2.12.
