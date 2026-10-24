@@ -727,10 +727,15 @@ Alanlar hem **masada haritadan çizilecek** hem **öğret-kaydet** ile kaydedile
     - ✅ 6c — `learning/to_lerobot.py` + `eval_offline.py` + `train_edge.ipynb`
       (LeRobot 0.6.1 sabit; dev container'da uçtan uca koşuldu). ⚠️ ACT
       varsayılan bloğu 10 sn kör sürüş → 20/5. Model 52M, paket 190 MB.
-    - **Sıradaki: 6d** — `policy_node` + `policy_gate` (twist_mux 20) + sim'de
-      kapalı çevrim + otomatik DAgger; Pi 4'te çıkarım süresi ölçümü.
-      Kullanıcının işi: `edge_batch` ile veri üret → defteri Colab/Kaggle'da
-      koş. Donanım tarafında B1 (flash) hâlâ darboğaz.
+    - ✅ Kaggle (hesap `yusuftiryaki`, anahtar `~/.claude`'da): 18 uzman
+      bölümü, T4'te 5 000 adım ACT (~14 dk), checkpoint `~/.robot/policies/`.
+    - ✅ Sıkışma tespiti (`jam_monitor`) — alan dışında biçme boşluğu kapandı.
+    - ✅ 6d-1 `policy_gate` (twist_mux 20), ✅ 6d-2 `policy_node` + kapalı
+      çevrim (`policy_eval`): görülmemiş sahalarda kenarı takip ediyor,
+      dışarı çıkmıyor; hata uzmanın 2–3 katı ve **çok yavaş** (learning.md).
+    - **Sıradaki:** yavaşlığın sebebi; otomatik DAgger; ikinci kamera deneyi
+      (kamera alımına o karar versin); Pi 4'te çıkarım süresi. Donanım
+      tarafında B1 (flash) hâlâ darboğaz.
   - Sahada ilk kullanım için `robot.service`'e `site_file:=` eklenmeli
     (deployment.md adım 8).
 
