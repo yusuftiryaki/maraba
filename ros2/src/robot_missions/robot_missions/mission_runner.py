@@ -66,6 +66,7 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from robot_missions import kit_gate
 from robot_missions.mission import (
     MissionError, RobotSpec, mission_positions, parse_mission, plan_from_answer)
 from robot_missions.planner import PlanError, free_intervals
@@ -164,9 +165,13 @@ class MissionRunner(Node):
         # alan dışında biçme"). Not running = never jammed.
         self.create_subscription(String, "jam_monitor/state", self._on_jam, latched)
         self._jammed = False
+        # The kit socket (robot_kit; docs/kit-soketi.md). Never heard = no
+        # socket: kit missions are refused, the rest is untouched (kit_gate.py).
+        self._kit = None
+        self.create_subscription(String, "kit/state", self._on_kit, latched)
         self.create_service(StartMission, "~/start", self._on_start)
         self.create_service(Trigger, "~/pause", self._command(self._policy.pause))
-        self.create_service(Trigger, "~/resume", self._command(self._policy.resume))
+        self.create_service(Trigger, "~/resume", self._on_resume)
         self.create_service(Trigger, "~/abort", self._command(self._policy.abort))
         self.create_timer(0.2, self._tick)
         self.create_timer(1.0, self._publish_status)
@@ -184,6 +189,10 @@ class MissionRunner(Node):
         except (json.JSONDecodeError, SiteError, MissionError, OSError) as exc:
             response.accepted, response.message = False, str(exc)
             return response
+        why = kit_gate.unmet(mission.type.requires, self._kit)
+        if why is not None:
+            response.accepted, response.message = False, why
+            return response
         accepted, message, actions = self._policy.start(spec)
         if accepted:
             self._site, self._mission, self._plan = site, mission, None
@@ -198,6 +207,42 @@ class MissionRunner(Node):
             self._run(actions)
             return response
         return handler
+
+    def _requires(self):
+        mission = self._mission
+        if mission is None and self._policy.progress.mission is not None:
+            try:
+                mission = parse_mission(self._policy.progress.mission, self._load_site())
+            except (SiteError, MissionError, OSError):
+                return ()
+        return mission.type.requires if mission is not None else ()
+
+    def _on_resume(self, _request, response):
+        why = kit_gate.unmet(self._requires(), self._kit)
+        if why is not None:
+            response.success, response.message = False, why
+            return response
+        response.success, response.message, actions = self._policy.resume()
+        self._run(actions)
+        return response
+
+    def _on_kit(self, message: String) -> None:
+        try:
+            kit = json.loads(message.data)
+        except ValueError:
+            return
+        before, self._kit = self._kit, kit
+        if self._policy.state not in (State.RUNNING, State.WAITING_DOCK):
+            return
+        why = kit_gate.lost(before, kit, self._requires())
+        if why is None:
+            return
+        self.get_logger().warn(f"pausing the mission: {why}")
+        self._targets = {}
+        self._cutting = False
+        self._reverse_pub.publish(Twist())
+        _ok, _message, actions = self._policy.pause(why)
+        self._run(actions)
 
     def _on_detected(self, message: String) -> None:
         self._detected = [(d["x"], d["y"], d["radius"]) for d in json.loads(message.data)]

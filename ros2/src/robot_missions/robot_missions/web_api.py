@@ -212,7 +212,8 @@ class WebApi:
     def task_types() -> Dict[str, Any]:
         out = {}
         for name, task in TASK_TYPES.items():
-            out[name] = {"on": task.on, "describe": task.describe, "params": {
+            out[name] = {"on": task.on, "describe": task.describe,
+                         "requires": list(task.requires), "params": {
                 key: {"default": p.default, "kind": p.kind.__name__, "low": p.low,
                       "high": p.high, "choices": list(p.choices), "optional": p.optional}
                 for key, p in task.params.items()}}

@@ -16,8 +16,6 @@ Spawns the stack, ~2-3 min. Skips without ROS.
 
 import json
 import math
-import os
-import threading
 import time
 
 import pytest
@@ -39,7 +37,6 @@ from robot_sim.site_world import EARTH_RADIUS_M         # noqa: E402
 
 DATUM_LAT, DATUM_LON = 41.0, 29.0          # sim_node's defaults
 LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
-CASTER_PORT = 12101
 
 
 class Probe(Node):
@@ -126,31 +123,13 @@ def probe(ros):
     node.destroy_node()
 
 
-@pytest.fixture
-def caster(tmp_path):
-    stop, ready = threading.Event(), threading.Event()
-    thread = threading.Thread(
-        target=fake_kit.serve_caster,
-        kwargs=dict(port=CASTER_PORT, mountpoint="TEST", rate_hz=2.0, chunked=True,
-                    stop=stop, ready=ready, log=lambda *_: None),
-        daemon=True)
-    thread.start()
-    assert ready.wait(5.0), "fake caster did not start"
-    path = os.path.join(str(tmp_path), "ntrip.yaml")
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(f"host: 127.0.0.1\nport: {CASTER_PORT}\nmountpoint: TEST\n")
-    yield path
-    stop.set()
-    thread.join(timeout=5.0)
-
-
 def plug(stack, variant="v1-nocam"):
     hw.write_fake(stack.kit_dir, True, manifest.encode(fake_kit.variant(variant)))
 
 
-def test_plug_rtk_unplug(kit_stack, probe, caster):
+def test_plug_rtk_unplug(kit_stack, probe, ntrip_caster):
     """The whole K1 chain on one stack: no kit -> plug -> RTK -> unplug."""
-    stack = kit_stack(ntrip_file=caster)
+    stack = kit_stack(ntrip_file=ntrip_caster)
     probe.wait_until(lambda: probe.state is not None and probe.ekf_global is not None
                      and probe.truth is not None, 40.0, "kit/state and ekf_global")
     assert probe.state["state"] == "NONE" and probe.state["gps_source"] == "neo6m"

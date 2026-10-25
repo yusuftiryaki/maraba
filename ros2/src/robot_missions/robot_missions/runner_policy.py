@@ -155,13 +155,13 @@ class RunnerPolicy:
         self._enter(State.PAUSED, "restored after a restart — resume to continue")
         return []
 
-    def pause(self) -> tuple:
+    def pause(self, why: str = "paused by request") -> tuple:
         if self.state == State.RUNNING:
             actions = self._cancel_in_flight()
-            self._enter(State.PAUSED, "paused by request")
+            self._enter(State.PAUSED, why)
             return True, "paused", actions + [Persist()]
         if self.state == State.WAITING_DOCK:
-            self._enter(State.PAUSED, "paused by request (was waiting on the dock)")
+            self._enter(State.PAUSED, f"{why} (was waiting on the dock)")
             return True, "paused", [Persist()]
         return False, f"nothing to pause in {self.state.value}", []
 

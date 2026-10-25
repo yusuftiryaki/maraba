@@ -302,6 +302,8 @@ function renderParams() {
   const type = taskTypes[$("m-type").value];
   $("m-describe").textContent = { area: "Sahadaki bir alanda çalışır.",
     route: "Sahadaki bir rotayı sürer.", target: "Haritada tıkladığın ya da listeden seçtiğin noktaya gider." }[type.on] || "";
+  if (type.requires && type.requires.length)
+    $("m-describe").textContent += ` Kit gerekir: ${type.requires.join(", ")}.`;
   const box = $("m-params");
   box.innerHTML = "";
   for (const [key, p] of Object.entries(type.params)) {
@@ -417,11 +419,44 @@ async function pollStatus() {
     $("battery").textContent = s.battery && s.battery.percentage !== null
       ? `🔋 %${Math.round(s.battery.percentage * 100)}` : "";
     $("mission-status").textContent = m ? JSON.stringify(m, null, 1) : "";
+    showKit(s.kit);
     if (typeof onTeachStatus === "function") onTeachStatus(s.teach);
     if (typeof onEpisodeStatus === "function") onEpisodeStatus(s.episode);
   } catch (e) {
     $("status-line").textContent = "Robota ulaşılamıyor: " + e.message;
   }
+}
+
+// --- the kit socket (docs/kit-soketi.md) -------------------------------------
+// One badge in the header: which kit, its RTK state, which GPS the robot uses.
+// Hidden on a robot without the socket (no kit/state at all).
+const KIT_STATE_TR = { NONE: "kit yok", READY: "kit hazır", DEGRADED: "kit eksik" };
+const SOLUTION_TR = { rtk_fixed: "RTK fixed", rtk_float: "RTK float",
+                      single: "RTK yok", none: "konum yok" };
+function showKit(k) {
+  const box = $("kit");
+  if (!k) { box.hidden = true; return; }
+  box.hidden = false;
+  box.className = "kit-" + k.state.toLowerCase();
+  let text = "🧰 " + (KIT_STATE_TR[k.state] || k.state);
+  const tips = [];
+  if (k.kit) {
+    text += " · " + k.kit.serial;
+    if (k.gnss) {
+      text += " · " + (SOLUTION_TR[k.gnss.solution] || k.gnss.solution);
+      if (k.gnss.h_acc_m !== null && k.gnss.h_acc_m !== undefined)
+        text += ` ±${k.gnss.h_acc_m < 1 ? Math.round(k.gnss.h_acc_m * 100) + " cm"
+                                          : k.gnss.h_acc_m.toFixed(1) + " m"}`;
+    }
+    tips.push("donanım: " + k.kit.caps.join(", "));
+  }
+  if (k.missing && k.missing.length) tips.push("veri gelmiyor: " + k.missing.join(", "));
+  if (k.error) tips.push("hata: " + k.error);
+  tips.push("GPS: " + (k.gps_source === "kit" ? "kitin F9P'si" : "robotun NEO-6M'i") +
+            (k.gps_wanted !== k.gps_source ? " (robot durunca değişecek)" : ""));
+  if (k.ntrip) tips.push("NTRIP: " + k.ntrip.state + (k.ntrip.error ? " — " + k.ntrip.error : ""));
+  box.textContent = text;
+  box.title = tips.join("\n");
 }
 
 // --- live camera --------------------------------------------------------------

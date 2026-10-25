@@ -93,6 +93,9 @@ class TaskType:
     # (inputs, params, robot, start) -> Plan; inputs is what plan_mission built
     plan: Callable[["Inputs", Dict[str, Any], RobotSpec, Optional[XY]], Plan]
     describe: str = ""
+    # What the kit socket must provide (manifest capabilities, e.g. "gnss_rtk",
+    # "cam360"); kit_gate.unmet refuses the mission otherwise. () = any robot.
+    requires: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
