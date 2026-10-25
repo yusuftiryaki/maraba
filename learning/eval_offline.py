@@ -33,7 +33,10 @@ def load(checkpoint: str, device: str):
     config.device = device
     policy = get_policy_class(config.type).from_pretrained(checkpoint, config=config)
     policy.to(device).eval()
-    pre, post = make_pre_post_processors(config, pretrained_path=checkpoint)
+    # ⚠️ The preprocessor saves the TRAINING device ("cuda" from Kaggle).
+    pre, post = make_pre_post_processors(
+        config, pretrained_path=checkpoint,
+        preprocessor_overrides={"device_processor": {"device": device}})
     return policy, pre, post
 
 

@@ -344,6 +344,37 @@ yayınlar — **damga, komutun hesaplandığı gözleminki**.
   çit x = 3.0'da **3.03 m**'de kapandı ve durdu. `test_gate.py`: kuralların
   her biri.
 
+### 6d-2 ✅: `policy_node` + kapalı çevrim değerlendirme (2026-10-24)
+- `robot_learning/observation.py` (ROS'suz): gözlem, eğitimdekinin birebir
+  aynısı — durum sütunları `to_lerobot.DEFAULT_STATE` sırasıyla, kamera
+  `camera/jpeg` → RGB, 320×240, CHW, [0, 1]. Testler eğitim tarafının kendi
+  tanımlarına bağlı (sessiz uyuşmazlık = yanlış süren politika).
+- `policy_node`: checkpoint'i yükler, 10 Hz (veri setinin fps'i) `select_action`,
+  `policy/cmd`'ye yayınlar (damga = kamera karesi), kapı açılınca kuyruğu
+  sıfırlar. torch + LeRobot ister → `--system-site-packages` ile kurulmuş bir
+  venv'de: `<venv>/bin/python -m robot_learning.policy_node -p checkpoint:=...`
+- ⚠️ **Kaggle'da (GPU) eğitilmiş modelin ön-işlemesi cihazı "cuda" diye
+  kaydediyor → CPU'da yüklenmiyor** (Pi'da da). Yüklerken `device_processor`
+  seçilen cihaza ezdiriliyor (`policy_node`, `eval_offline.py`).
+- `ros2 run robot_sim policy_eval --python <venv>/bin/python --checkpoint ...
+  --seeds 20,21,22`: her saha için taze yığın, kapı sahayla açılır, politika
+  `--seconds` boyunca sürer; uzmanla aynı ölçütle (`edge_metrics`) puanlanır.
+
+**İlk kapalı çevrim sonucu** (18 uzman bölümü, Kaggle T4'te 5 000 adım ACT;
+eğitimde hiç görülmemiş sahalar; 150 s):
+| saha | | tur | ort. hata | p95 | kenarın ulaşılanı | dışarı |
+|---|---|---|---|---|---|---|
+| 20 | uzman | tam | 2.1 cm | 6.9 cm | %93 | 0 |
+| 20 | politika | %38 | 5.5 cm | 18 cm | %40 | 0 |
+| 21 | uzman | tam | 1.7 cm | 6.2 cm | %99 | 0 |
+| 21 | politika | %69 | 7.8 cm | 22 cm | %72 | 0 |
+Politika kenarı **gerçekten takip ediyor ve dışarı çıkmıyor**, ama hatası
+uzmanın 2–3 katı ve **çok yavaş** (150 s'de turun %38–69'u; uzman ~80 s'de tam
+tur) — sebebi incelenmedi (çekingen hız mı, köşede duraksama mı). Çevrimdışı
+MAE (0.011 m/s) bunu göstermiyordu: kapalı çevrimin ayrı ölçülme sebebi bu.
+Çıkarım (dizüstü CPU): ortanca 2 ms, blok hesabı 134–175 ms (her 5 adımda).
+Saha 22: yığın 90 s'de kalkmadı (altyapı), tekrar koşulacak.
+
 ## Sonra: politika robota nasıl takılır
 Algoritma seçilince (adaylar: ACT, Diffusion Policy — ikisi de kamera +
 durum → aksiyon dizisi) öğrenilen politika twist_mux'a teleop ile Nav2
