@@ -21,6 +21,7 @@ def generate_launch_description():
     mag_params = os.path.join(pkg, "config", "qmc5883l.yaml")
 
     use_gps = LaunchConfiguration("use_gps")
+    use_kit = LaunchConfiguration("use_kit")
     use_imu = LaunchConfiguration("use_imu")
     use_mag = LaunchConfiguration("use_mag")
     use_imu_filter = LaunchConfiguration("use_imu_filter")
@@ -34,6 +35,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("use_gps", default_value="false"),
+        DeclareLaunchArgument("use_kit", default_value="false"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("use_imu", default_value="false"),
         DeclareLaunchArgument("use_mag", default_value="false"),
@@ -82,16 +84,21 @@ def generate_launch_description():
         DeclareLaunchArgument("gps_port", default_value="/dev/gps"),
 
         # NEO-6M over a USB-TTL adapter. Publishes /gps/fix (NavSatFix), which
-        # navsat_transform consumes.
+        # navsat_transform consumes — or, with the kit socket on (use_kit),
+        # /gps/neo6m/fix, and robot_kit's gps_selector publishes /gps/fix from
+        # whichever receiver kit_manager chose (docs/kit-soketi.md). Two nodes
+        # with opposite conditions because a remapping cannot be conditional;
+        # exactly one of them runs.
         # ⚠️ ros-jazzy-nmea-navsat-driver may not exist in the Jazzy apt repo
         # (docs/handoff.md, known blockers). If the image build fails on it,
         # build nmea_navsat_driver from source into this workspace instead.
-        Node(
+        *[Node(
             package="nmea_navsat_driver",
             executable="nmea_serial_driver",
             name="gps_driver",
             output="screen",
-            condition=IfCondition(use_gps),
+            condition=IfCondition(PythonExpression(
+                ["'", use_gps, "' == 'true' and '", use_kit, f"' == '{kit}'"])),
             parameters=[{
                 "port": gps_port,
                 "baud": 9600,          # NEO-6M factory default
@@ -102,8 +109,8 @@ def generate_launch_description():
             # vel: the Doppler velocity from VTG (useRMC false) — jam_monitor's
             # stall check (jam.py). ⚠️ The NEO-6M sends 1 Hz from the factory;
             # UBX-CFG-RATE to 5 Hz (docs/deployment.md step 4) makes it ~2x faster.
-            remappings=[("fix", "gps/fix"), ("vel", "gps/vel")],
-        ),
+            remappings=[("fix", f"{prefix}/fix"), ("vel", f"{prefix}/vel")],
+        ) for kit, prefix in (("false", "gps"), ("true", "gps/neo6m"))],
 
         # Pi Camera V2 over CSI: the charging-station marker (SP3) and, later,
         # ground segmentation (roadmap step 7).

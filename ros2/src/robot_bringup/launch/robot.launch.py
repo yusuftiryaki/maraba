@@ -92,6 +92,10 @@ def generate_launch_description():
     learning_sim = LaunchConfiguration("learning_sim")
     episode_split_s = LaunchConfiguration("episode_split_s")
     use_web = LaunchConfiguration("use_web")
+    use_kit = LaunchConfiguration("use_kit")
+    kit_fake_dir = LaunchConfiguration("kit_fake_dir")
+    kit_gnss_port = LaunchConfiguration("kit_gnss_port")
+    ntrip_file = LaunchConfiguration("ntrip_file")
     web_port = LaunchConfiguration("web_port")
 
     return LaunchDescription([
@@ -189,6 +193,21 @@ def generate_launch_description():
                         "too, and say so in episode.yaml.",
         ),
         DeclareLaunchArgument(
+            "use_kit", default_value="false",
+            description="The kit socket (docs/kit-soketi.md): detect the orchadOS "
+                        "kit, read its chip and F9P, choose the GPS. On the robot "
+                        "once the socket is fitted (docs/deployment.md, kit step).",
+        ),
+        DeclareLaunchArgument(
+            "kit_fake_dir", default_value="",
+            description="fake_kit's files instead of the Pi's presence pin and 1-Wire chip.",
+        ),
+        DeclareLaunchArgument("kit_gnss_port", default_value="/dev/kit_gnss"),
+        DeclareLaunchArgument(
+            "ntrip_file", default_value=os.path.expanduser("~/.robot/ntrip.yaml"),
+            description="The NTRIP caster (YAML). Missing: the kit runs without RTK.",
+        ),
+        DeclareLaunchArgument(
             "use_missions", default_value="true",
             description="Run mission_runner (with use_nav2). docs/missions.md.",
         ),
@@ -266,6 +285,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(os.path.join(launch_dir, "sensors.launch.py")),
             launch_arguments={
                 "use_gps": use_gps,
+                "use_kit": use_kit,
                 "use_imu": use_imu,
                 "use_mag": use_mag,
                 "use_imu_filter": use_imu_filter,
@@ -276,6 +296,15 @@ def generate_launch_description():
                 "fake_mag": fake_mag,
                 "use_sim_time": use_sim_time,
             }.items(),
+        ),
+
+        # The kit socket: off the motor command path entirely.
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(launch_dir, "kit.launch.py")),
+            condition=IfCondition(use_kit),
+            launch_arguments={"use_sim_time": use_sim_time, "kit_fake_dir": kit_fake_dir,
+                              "kit_gnss_port": kit_gnss_port,
+                              "ntrip_file": ntrip_file}.items(),
         ),
 
         IncludeLaunchDescription(

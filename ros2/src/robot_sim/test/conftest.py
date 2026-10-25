@@ -197,6 +197,10 @@ STACK_PATTERNS = (
     "episode_bag_recorder",
     # the privileged expert drives /cmd_vel_teleop: an orphan would drive the next robot
     "lib/robot_sim/edge_expert",
+    # the kit socket: an orphan selector would publish a second /gps/fix, an
+    # orphan kit_manager a stale latched kit/state
+    "lib/robot_kit/kit_manager", "lib/robot_kit/kit_gnss", "lib/robot_kit/gps_selector",
+    "lib/robot_kit/ntrip_client",
 )
 
 
@@ -386,6 +390,46 @@ def global_stack(ros):
 
     def _make(*sim_args):
         stack = GlobalStack(*sim_args)
+        made.append(stack)
+        return stack
+
+    yield _make
+    for stack in made:
+        stack.close()
+
+
+class KitStack(GlobalStack):
+    """GlobalStack with the kit socket on (docs/kit-soketi.md): kit_manager reads
+    fake_kit's files in `kit_dir`, sim_node runs the kit's F9P on a pty and the
+    robot's own NEO-6M moves to gps/neo6m/* — gps_selector is the one
+    publisher of gps/fix, as on the robot with use_kit:=true.
+
+    Nothing is plugged at start; the test plugs (robot_kit.hw.write_fake).
+    `ntrip_file` names the caster the test runs (or none)."""
+
+    GNSS_LINK = "/tmp/fake_kit_gnss_test"
+
+    def __init__(self, workdir, *sim_args, ntrip_file=""):
+        self.kit_dir = os.path.join(workdir, "kit")
+        self.ntrip_file = ntrip_file or os.path.join(workdir, "no-ntrip.yaml")
+        from robot_kit.hw import write_fake
+        write_fake(self.kit_dir, False, None)
+        super().__init__("--ros-args", "-r", "gps/fix:=gps/neo6m/fix",
+                         "-r", "gps/vel:=gps/neo6m/vel",
+                         "-p", f"kit_gnss_link:={self.GNSS_LINK}",
+                         "-p", f"kit_fake_dir:={self.kit_dir}", *sim_args)
+
+    def launch_args(self):
+        return (*super().launch_args(), "use_kit:=true", f"kit_fake_dir:={self.kit_dir}",
+                f"kit_gnss_port:={self.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}")
+
+
+@pytest.fixture
+def kit_stack(ros, tmp_path):
+    made = []
+
+    def _make(*sim_args, **kwargs):
+        stack = KitStack(str(tmp_path), *sim_args, **kwargs)
         made.append(stack)
         return stack
 
