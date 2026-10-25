@@ -27,7 +27,8 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from sensor_msgs.msg import CompressedImage, Imu
 from std_msgs.msg import String
 
-from robot_learning.observation import image_chw, state_vector
+from robot_learning.observation import checkpoint_state, image_chw, state_vector
+
 
 
 class PolicyNode(Node):
@@ -64,12 +65,14 @@ class PolicyNode(Node):
         self._torch = torch
         self._policy = get_policy_class(config.type).from_pretrained(checkpoint, config=config)
         self._policy.to(device).eval()
+        self._state_names = checkpoint_state(checkpoint, config.input_features)
         # ⚠️ The preprocessor saves the TRAINING device: a checkpoint from a
         # Kaggle GPU says "cuda" and refuses to load on a CPU (here, the Pi).
         self._pre, self._post = make_pre_post_processors(
             config, pretrained_path=checkpoint,
             preprocessor_overrides={"device_processor": {"device": device}})
-        self.get_logger().info(f"loaded {config.type} from {checkpoint} on {device}")
+        self.get_logger().info(f"loaded {config.type} from {checkpoint} on {device}, "
+                               f"state {list(self._state_names) or 'none (camera only)'}")
 
     def _on_image(self, msg: CompressedImage) -> None:
         self._image = (msg.header.stamp, bytes(msg.data))
@@ -92,15 +95,16 @@ class PolicyNode(Node):
     def _step(self) -> None:
         if self._image is None:
             return
-        state = state_vector(self._latest)
+        state = state_vector(self._latest, self._state_names)
         stamp, jpeg = self._image
         image = image_chw(jpeg)
         if state is None or image is None:
             return
         torch = self._torch
-        batch = {"observation.state": torch.from_numpy(state).unsqueeze(0),
-                 "observation.images.front": torch.from_numpy(image).unsqueeze(0),
+        batch = {"observation.images.front": torch.from_numpy(image).unsqueeze(0),
                  "task": [self.get_parameter("task").value]}
+        if self._state_names:
+            batch["observation.state"] = torch.from_numpy(state).unsqueeze(0)
         started = time.perf_counter()
         with torch.no_grad():
             action = self._post(self._policy.select_action(self._pre(batch)))

@@ -5,7 +5,12 @@ it from the bag (docs/learning.md 6d). ROS-free (numpy + OpenCV).
 for RGB, or a differently sized frame does not fail — it drives wrongly. So
 the definitions are pinned to the training side by tests:
 
-    state   learning/to_lerobot.py DEFAULT_STATE, from export.py's series:
+    state   the columns the checkpoint was trained on (policy_node reads
+            them from the pack's hoverbot_conversion.json). Default: the
+            accelerometer only — to_lerobot.DEFAULT_STATE (velocities in the
+            state taught the first policy to copy its own speed: learning.md
+            6d, "copycat").
+            The columns policy_node can build, from export.py's series:
             odom.v, odom.w  = /odom twist (linear.x, angular.z)
             imu.gz, imu.ax, imu.ay = /imu/data_raw (angular_velocity.z,
                                      linear_acceleration.x, .y)
@@ -16,11 +21,15 @@ the definitions are pinned to the training side by tests:
 
 from __future__ import annotations
 
+import json
+import os
 from typing import Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
-STATE_NAMES = ("odom.v", "odom.w", "imu.gz", "imu.ax", "imu.ay")
+STATE_NAMES = ("imu.ax", "imu.ay")                     # = to_lerobot.DEFAULT_STATE
+LIVE_STATE = ("odom.v", "odom.w", "imu.gz", "imu.ax", "imu.ay")   # what can be built
+LEGACY_STATE = LIVE_STATE        # packs from before hoverbot_conversion.json was packed
 IMAGE_SIZE = (320, 240)                      # (width, height)
 
 
@@ -31,6 +40,30 @@ def state_vector(latest: Dict[str, float], names: Sequence[str] = STATE_NAMES
         return None
     return np.array([latest[n] for n in names], dtype=np.float32)
 
+
+def checkpoint_state(checkpoint: str, input_features) -> tuple:
+    """The state columns, in order, the checkpoint was trained on.
+
+    ⚠️ A wrong guess is SILENT (observation.py): so the names come from the
+    conversion summary packed next to the weights (train_edge.ipynb), and
+    their count must match what the model takes.
+    """
+    feature = input_features.get("observation.state")
+    if feature is None:
+        return ()                                  # camera only
+    summary = os.path.join(checkpoint, "hoverbot_conversion.json")
+    if os.path.exists(summary):
+        with open(summary, encoding="utf-8") as handle:
+            names = tuple(json.load(handle)["state"])
+    else:
+        names = LEGACY_STATE
+    if len(names) != feature.shape[0]:
+        raise ValueError(f"checkpoint takes {feature.shape[0]} state columns, "
+                         f"its summary names {len(names)}: {names}")
+    unknown = [n for n in names if n not in LIVE_STATE]
+    if unknown:
+        raise ValueError(f"policy_node cannot build state columns {unknown}")
+    return names
 
 def image_chw(jpeg: bytes, size: Tuple[int, int] = IMAGE_SIZE) -> Optional[np.ndarray]:
     import cv2

@@ -51,6 +51,12 @@ def test_frames_start_where_image_label_and_state_all_exist(tmp_path):
     assert np.allclose(action, [[0.3, 0.1]] * 4) and action.dtype == np.float32
 
 
+def test_camera_only_needs_no_state_column(tmp_path):
+    item = make_episode(tmp_path)
+    images, state, action = to_lerobot.episode_arrays(str(tmp_path), item, (), [], "expert")
+    assert len(images) == len(action) == 4 and state.shape == (4, 0)
+
+
 def test_no_expert_means_no_expert_episode(tmp_path):
     item = make_episode(tmp_path)
     data = dict(np.load(tmp_path / item["data"]))
