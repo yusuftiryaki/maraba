@@ -84,3 +84,15 @@ def test_metrics_on_hand_made_drives():
     assert edge_metrics(LAWN, 0.4, drifted)["error_mean"] == pytest.approx(0.3)
     outside = [(x, -1.2) for x, _ in on_edge]
     assert edge_metrics(LAWN, 0.4, outside)["outside"] == 1.0
+
+
+@pytest.mark.parametrize("direction, sign", [("ccw", 1.0), ("cw", -1.0)])
+def test_a_target_behind_is_always_turned_the_same_way(direction, sign):
+    """Either side of 180 deg the label must not flip (DAgger, 6d-5)."""
+    lawn = Polygon([(-3, -2), (3, -2), (3, 2), (-3, 2)])
+    expert = EdgeExpert(lawn, ExpertConfig(offset_m=0.4), direction)
+    x, y = 0.0, -1.6                                   # on the path, bottom edge
+    ahead = 0.0 if direction == "ccw" else math.pi     # the driving direction there
+    for off in (-0.05, 0.05):
+        v, w = expert.label(x, y, ahead + math.pi + off)
+        assert v == 0.0 and math.copysign(1.0, w) == sign

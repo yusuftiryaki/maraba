@@ -745,8 +745,13 @@ Alanlar hem **masada haritadan çizilecek** hem **öğret-kaydet** ile kaydedile
       ~1.7–1.9 tur, uzman hızında, hata 3.6–7.7 cm. Saha 21 iki yönde de
       dışarı (kenar başlangıca 2.1 m — eğitimdekilerden yakın); kapı durdurdu.
       Checkpoint `~/.robot/policies/act_edge_18_dir` (Kaggle `hoverbot-edge-train-dir`).
-    - **Sıradaki:** otomatik DAgger (6d-5: politika sürer, uzman etiketler;
-      saha 21 gibi durumlar); ikinci kamera deneyi
+    - ✅ 6d-5 otomatik DAgger (`dagger_batch`): politika sürer, uzman etiketler,
+      uzun yerinde dönüşte uzman devralır; uzman arkadaki hedefe hep içe döner
+      (1. turda çelişkili etiketler politikayı yerinde döndürdü). 2. tur
+      (18 uzman + 20 DAgger, 10k adım): 6 koşunun 5'inde ~1.6–2 tur, saha 21
+      çözüldü, hiç dışarı yok; **20 cw hâlâ takılıyor**. Checkpoint
+      `~/.robot/policies/act_dagger2` (Kaggle `hoverbot-edge-train-dagger2`).
+    - **Sıradaki:** DAgger 3. tur (act_dagger2 ile topla); ikinci kamera deneyi
       (kamera alımına o karar versin); Pi 4'te çıkarım süresi. Donanım
       tarafında B1 (flash) hâlâ darboğaz.
   - Sahada ilk kullanım için `robot.service`'e `site_file:=` eklenmeli

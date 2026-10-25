@@ -448,6 +448,51 @@ mı sola mı" diyemez → sağa-sola titreme, bir sahada yanlış yöne gitme.
   alışkanlık ("önce ~2.5 m düz git"); otomatik DAgger'ın ve daha çok sahanın
   işi (6d-5).
 
+### 6d-5 ✅: otomatik DAgger — `dagger_batch` (2026-10-25)
+**Politika sürer, uzman etiketler.** `ros2 run robot_sim dagger_batch --python
+<venv>/bin/python --checkpoint ... --lawns 10 --seed 101`: her saha × yön için
+taze yığın, `edge_expert drive:=false` (yalnız `expert/cmd_vel` etiketi —
+`label()` pozun saf fonksiyonu), `policy_node` kapıdan. Bölüm biter: tur
+tamam, kapı kapandı (alandan çıktı — son metreler en değerli etiketler) ya da
+süre. Sonra uzman bölümleriyle birlikte `episode_export` → `to_lerobot`
+(etiket: `action_expert`). Toplama sahaları 101–110: ne eğitimde (1–9) ne
+değerlendirmede (20–22).
+
+**1. tur — ve iki ders.** 18 uzman + 20 DAgger bölümüyle (5k ve 10k adım)
+saha 21 **çözüldü** (iki yönde ~1.8–2 tur, eskiden dışarı), ama cw'de
+politika yerinde dönüp kaldı (20 cw 0–%12, 22 cw 0; 10k adımda daha kötü —
+az eğitim değil). Etiketlere bakınca:
+- Başarısız DAgger bölümlerinin karelerinin **%87–91'i "yerinde dön"**,
+  tek bir bölümde **124 s kesintisiz aynı etiket**: kaybolmuş politika aynı
+  durumda dakikalarca kalıyor, uzman yalnız etiketlediği için düzeltmiyor.
+- Robot dönerken hedef tam arkaya geçince uzmanın "yakın yön"ü 180°'de işaret
+  değiştiriyor: o bölümlerde dönüşlerin %16–71'i sola — **çelişkili etiket**.
+
+Düzeltmeler: (1) hedef 150°'den fazla arkadaysa uzman **hep sahanın içine
+doğru** döner (`ExpertConfig.behind_deg`; hâlâ pozun saf fonksiyonu). (2)
+**Devralma** (`--takeover-s 3`): etiket 3 s "yerinde dön" derse uzman
+direksiyonu alır (`edge_expert drive:=true` → `cmd_vel_teleop`, twist_mux'ta
+politikanın üstünde), 2 s ileri sürünce bırakır; bölüm kipi `intervention`.
+
+**2. tur** (DAgger öncesi politikayla, aynı sahalar): 20/20 tur tamam, uzman
+çoğunlukla bir kez 2–4 s devraldı (en zor sahada 6 kez, 24 s). Etiketlerde
+"yerinde dön" %11–27, en uzun 3–6 s, yön tutarlı.
+
+| saha | yön | DAgger öncesi (6d-4) | 1. tur, 10k | **2. tur, 10k** | 2. tur hata |
+|---|---|---|---|---|---|
+| 20 | ccw | %182 | %178 | **%183** | 4.0 cm |
+| 20 | cw | %164 | 0 | %10 ⚠️ | 4.5 cm |
+| 21 | ccw | dışarı | %191 | **%198** | 3.3 cm |
+| 21 | cw | dışarı | %181 | **%179** | 7.5 cm |
+| 22 | ccw | %192 | %69 | **%185** | 3.4 cm |
+| 22 | cw | %169 | 0 | **%160** | 4.2 cm |
+
+  (150 s'de tur; hiçbir koşuda dışarı yok.) 6'dan 5'i uzman hızında ~1.6–2
+  tur, saha 21 çözülmüş. **20 cw hâlâ yerinde dönüyor** (%66 dönüş, 15 yön
+  değişimi/dk) — her yapılandırma tek koşu, gürültü payı büyük. DAgger'ın
+  olağan yolu: bir sonraki tur bu politikayla toplanır (o hâlâ takıldığı
+  durumları ziyaret eder).
+
 ## Sonra: politika robota nasıl takılır
 Algoritma seçilince (adaylar: ACT, Diffusion Policy — ikisi de kamera +
 durum → aksiyon dizisi) öğrenilen politika twist_mux'a teleop ile Nav2

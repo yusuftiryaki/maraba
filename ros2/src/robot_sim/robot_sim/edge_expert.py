@@ -54,6 +54,7 @@ class ExpertConfig:
     lookahead: float = 0.6        # m along the path
     max_angular: float = 1.0      # rad/s
     turn_in_place_deg: float = 30.0
+    behind_deg: float = 150.0     # target this far round: turn the LAWN's way, not the nearer
     corner_deg: float = 30.0      # a vertex turning more than this is a corner
     on_path_m: float = 0.2        # lap counting starts once this close
 
@@ -65,6 +66,7 @@ class EdgeExpert:
                  direction: str = "ccw", laps: float = 1.0):
         self.config = config
         self.path = edge_path(boundary, config.offset_m, direction)
+        self.inward = 1.0 if direction == "ccw" else -1.0   # ccw: the lawn is on the left
         self.length = self.path.length
         self.laps = laps
         # Corners: the carrot never passes one before the robot does, so the
@@ -108,6 +110,12 @@ class EdgeExpert:
         s = self.path.project(here)
         target = self.path.interpolate(self._carrot(s))
         heading = _wrap(math.atan2(target.y - y, target.x - x) - yaw)
+        if abs(heading) > math.radians(c.behind_deg):
+            # ⚠️ Target behind: "the nearer way" flips sign at 180 deg. A
+            # spinning policy's states sit right there, and DAgger labels
+            # in them alternated left/right (16-71 % left in one episode):
+            # the retrained policy dithered on the spot. One way, always.
+            return 0.0, self.inward * c.max_angular
         if abs(heading) > math.radians(c.turn_in_place_deg):
             return 0.0, math.copysign(c.max_angular, heading)
         distance = max(1e-6, math.hypot(target.x - x, target.y - y))
