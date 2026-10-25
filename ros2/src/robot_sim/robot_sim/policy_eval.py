@@ -166,7 +166,7 @@ def main(argv=None) -> int:
     parser.add_argument("--offset", type=float, default=0.4)
     parser.add_argument("--directions", default="ccw",
                         help="ccw,cw: each lawn both ways (packs with edge.dir in the state)")
-    parser.add_argument("--camera", choices=("front", "edge"), default="front",
+    parser.add_argument("--camera", choices=("front", "edge", "pano"), default="front",
                         help="the camera the policy was trained on (edge_batch --camera)")
     parser.add_argument("--task", choices=("edge", "tree"), default="edge")
     parser.add_argument("--no-expert", action="store_true")

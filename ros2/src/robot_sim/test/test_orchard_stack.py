@@ -77,7 +77,23 @@ class Watcher(Node):
         self.create_subscription(String, "/sim/kit_f9p",
                                  lambda m: setattr(self, "oracle", json.loads(m.data)), 10)
         self.create_subscription(Odometry, "/ground_truth", self._on_truth, 10)
+        # (truth x, y, ekf_global x, y) at ~1 Hz while RUNNING: the localization
+        # error, converted after the run with one /fromLLArray call
+        self.pairs, self._ekf, self._last_pair, self.pair_times = [], None, 0.0, []
+        self.trunk_log = []                # (time, status) for a dump
+        self.create_subscription(Odometry, "/odometry/filtered/global",
+                                 lambda m: setattr(self, "_ekf", m.pose.pose.position), 10)
         self.create_subscription(Bool, "/collision_truth", self._on_collision, 10)
+        self.trunk_frames = {}             # reason ("" = accepted) -> count, while RUNNING
+        self.create_subscription(String, "/kit/trunk_status", self._on_trunks, 10)
+
+    def _on_trunks(self, msg):
+        data = json.loads(msg.data)
+        self.trunk_log.append((time.monotonic(), data))
+        self.trunk_ok = getattr(self, "trunk_ok", False) or data["accepted"]
+        if self.status and self.status["state"] == "RUNNING":
+            reason = data["reason"].split(":")[0][:40]
+            self.trunk_frames[reason] = self.trunk_frames.get(reason, 0) + 1
 
     def _on_camera(self, msg):
         self.camera = json.loads(msg.data)
@@ -87,6 +103,27 @@ class Watcher(Node):
         if self.status and self.status["state"] == "RUNNING":
             p = msg.pose.pose.position
             self.track.append((p.x, p.y))
+            if self._ekf is not None and time.monotonic() - self._last_pair > 1.0:
+                self._last_pair = time.monotonic()
+                self.pairs.append((p.x, p.y, self._ekf.x, self._ekf.y))
+                self.pair_times.append(time.monotonic())
+
+    def localization_errors(self):
+        from geographic_msgs.msg import GeoPoint
+        from robot_localization.srv import FromLLArray
+        from robot_sim.site_world import to_lonlat
+        client = self.create_client(FromLLArray, "/fromLLArray")
+        assert client.wait_for_service(timeout_sec=10.0)
+        points = []
+        for tx, ty, _ex, _ey in self.pairs:
+            lon, lat = to_lonlat(tx, ty, 41.0, 29.0)
+            points.append(GeoPoint(latitude=lat, longitude=lon))
+        future = client.call_async(FromLLArray.Request(ll_points=points))
+        while not future.done():
+            rclpy.spin_once(self, timeout_sec=0.05)
+        answer = future.result().map_points
+        assert len(answer) == len(points)
+        return [math.hypot(ex - q.x, ey - q.y) for (_tx, _ty, ex, ey), q in zip(self.pairs, answer)]
 
     def _on_collision(self, msg):
         self.collided = self.collided or msg.data
@@ -115,8 +152,16 @@ def sides_seen(tree, track, reach=SPACING / 2 + 0.5):
     return seen
 
 
-def test_orchard_grid_scan_with_the_kit(site_kit_nav2_stack, tmp_path, ntrip_caster):
-    stack = site_kit_nav2_stack(orchard_site(), *physical_trees(), ntrip_file=ntrip_caster,
+@pytest.mark.parametrize("fix", ["rtk", "trunks"])
+def test_orchard_grid_scan_with_the_kit(site_kit_nav2_stack, tmp_path, request, fix):
+    """rtk: corrections from the fake caster. trunks: NO caster — the kit's F9P
+    single-point (~1 m wander) plus the trunk localizer (K2c), the
+    no-internet / lost-RTK case."""
+    if fix == "rtk":
+        extra, ntrip = (), request.getfixturevalue("ntrip_caster")
+    else:
+        extra, ntrip = ("-p", "kit_trunks_rate_hz:=2.0"), ""
+    stack = site_kit_nav2_stack(orchard_site(), *physical_trees(), *extra, ntrip_file=ntrip,
                                 camera_shim=KitStack.FAKE_CAMERA)
     runner = subprocess.Popen(
         ["ros2", "run", "robot_missions", "mission_runner", "--ros-args",
@@ -142,8 +187,13 @@ def test_orchard_grid_scan_with_the_kit(site_kit_nav2_stack, tmp_path, ntrip_cas
         watcher.wait_until(lambda: watcher.kit["state"] == "READY"
                            and watcher.kit["gps_source"] == "kit"
                            and watcher.camera and watcher.camera.get("connected")
-                           and watcher.oracle and watcher.oracle["solution"] == "rtk_fixed",
-                           60.0, "the kit ready: RTK fixed, camera connected")
+                           and watcher.oracle
+                           and (fix != "rtk" or watcher.oracle["solution"] == "rtk_fixed")
+                           # trunks: the localizer has fixed the pose once (the RTK
+                           # case's wait for rtk_fixed) — else the first rows run
+                           # on the single-point F9P alone
+                           and (fix != "trunks" or getattr(watcher, "trunk_ok", False)),
+                           60.0, f"the kit ready ({fix}), camera connected")
         start_mission(watcher, {"type": "orchard_grid", "area": "bahce"})
         started = time.monotonic()
         watcher.wait_until(lambda: watcher.status["state"] in ("DONE", "FAILED", "PAUSED"),
@@ -163,7 +213,7 @@ def test_orchard_grid_scan_with_the_kit(site_kit_nav2_stack, tmp_path, ntrip_cas
                 json.dump({"track": watcher.track, "trees": TREES, "status": watcher.status},
                           handle)
         seen = {tree: sides_seen(tree, watcher.track) for tree in TREES}
-        print(f"orchard scan: {elapsed:.0f} s, {watcher.status['total']} waypoints, "
+        print(f"orchard scan ({fix}): {elapsed:.0f} s, {watcher.status['total']} waypoints, "
               f"skipped {watcher.status['skipped']}, sides seen "
               f"{ {t: len(s) for t, s in seen.items()} }")
         # How far off its corridor the robot drove: the distance from each
@@ -178,11 +228,29 @@ def test_orchard_grid_scan_with_the_kit(site_kit_nav2_stack, tmp_path, ntrip_cas
         off = sorted(min(min(abs(y - ly) for ly in lines_y), min(abs(x - lx) for lx in lines_x))
                      for x, y in watcher.track)
         p95 = off[int(0.95 * (len(off) - 1))]
-        print(f"off the corridor lines: p95 {p95:.3f} m, max {off[-1]:.3f} m")
-        # measured 0.095 m (max 0.24, the turns); odom-anchored it was ~1 m
-        assert p95 < 0.2, "rows on RTK should hold their corridor to centimetres"
+        loc_series = watcher.localization_errors()
+        if dump:
+            with open(dump + ".loc.json", "w", encoding="utf-8") as handle:
+                json.dump({"pairs": watcher.pairs, "times": watcher.pair_times,
+                           "errors": loc_series, "trunks": watcher.trunk_log}, handle)
+        loc = sorted(loc_series)
+        print(f"localization ({fix}): median {loc[len(loc) // 2]:.3f} m, "
+              f"p95 {loc[int(0.95 * (len(loc) - 1))]:.3f} m")
+        print(f"off the corridor lines ({fix}): p95 {p95:.3f} m, max {off[-1]:.3f} m; "
+              f"trunk frames {watcher.trunk_frames}")
+        # measured on RTK 0.095 m (max 0.24, the turns); odom-anchored it was ~1 m.
+        # On trunks 0.23 m (localization p95 0.33): between fixes, at the
+        # orchard's edge, the estimate drifts towards the single-point F9P.
+        limit = 0.2 if fix == "rtk" else 0.35
+        assert p95 < limit, f"rows on {fix} should hold their corridor to decimetres"
         missing = {t: sorted({'north', 'south', 'east', 'west'} - s)
                    for t, s in seen.items() if len(s) < 4}
-        assert not missing, f"trees not passed on every side: {missing}"
+        sides = sum(len(v) for v in seen.values())
+        if fix == "rtk":
+            assert not missing, f"trees not passed on every side: {missing}"
+        else:
+            # Measured on trunks alone (2026-10-26): 23-24 of 24 sides; this
+            # 3 x 2 orchard is nearly all edge, where fewer trunks are in view.
+            assert sides >= 23, f"trees not passed on every side: {missing}"
     finally:
         watcher.destroy_node()

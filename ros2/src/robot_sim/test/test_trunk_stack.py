@@ -112,3 +112,27 @@ def test_trunks_hold_the_pose_without_rtk(site_kit_stack, probe):
     assert found, f"the new tree was not reported (with a lat/lon): {audit}"
     nearest = min(math.hypot(x - PLANTED[0], y - PLANTED[1]) for x, y in found)
     assert nearest < 0.6, f"the new tree reported {nearest:.2f} m from where it is: {audit}"
+
+
+def test_trunks_through_a_u_turn(site_kit_stack, probe):
+    """The corridor, an in-place U-turn, back: the fixes hold through the turn
+    (the hypothesis search's ±6° yaw window round the EKF's estimate)."""
+    stack = site_kit_stack(site_trees(), *world_trunks(), "-p", "kit_trunks_rate_hz:=2.0",
+                           camera_shim=KitStack.FAKE_CAMERA)
+    probe.wait_until(lambda: probe.state is not None and probe.ekf_global is not None
+                     and probe.truth is not None, 40.0, "kit/state and ekf_global")
+    plug(stack, "v1")
+    probe.wait_until(lambda: probe.state["gps_source"] == "kit", 30.0, "the GPS on the kit")
+    probe.spin_for(8.0)
+    errors = []
+    for cmd, secs in (((0.3, 0.0), 30.0), ((0.0, 0.6), 5.24), ((0.3, 0.0), 30.0)):
+        probe.cmd = cmd
+        end = time.monotonic() + secs
+        while time.monotonic() < end:
+            probe.spin_for(0.5)
+            errors.append(probe.map_error())
+    probe.cmd = (0.0, 0.0)
+    errors = np.array(errors)
+    print(f"through the U-turn: mean {errors.mean():.3f} m, p95 {np.percentile(errors, 95):.3f} m")
+    # measured: mean ~0.06, p95 ~0.2 (the sawtooth between 2 Hz fixes)
+    assert np.percentile(errors, 95) < 0.35

@@ -27,7 +27,8 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from sensor_msgs.msg import CompressedImage, Imu
 from std_msgs.msg import String
 
-from robot_learning.observation import checkpoint_state, image_chw, state_vector
+from robot_learning.observation import (checkpoint_image_size, checkpoint_state, image_chw,
+                                        state_vector)
 
 
 
@@ -72,6 +73,7 @@ class PolicyNode(Node):
         self._policy = get_policy_class(config.type).from_pretrained(checkpoint, config=config)
         self._policy.to(device).eval()
         self._state_names = checkpoint_state(checkpoint, config.input_features)
+        self._image_size = checkpoint_image_size(config.input_features)
         # ⚠️ The preprocessor saves the TRAINING device: a checkpoint from a
         # Kaggle GPU says "cuda" and refuses to load on a CPU (here, the Pi).
         self._pre, self._post = make_pre_post_processors(
@@ -103,7 +105,7 @@ class PolicyNode(Node):
             return
         state = state_vector(self._latest, self._state_names)
         stamp, jpeg = self._image
-        image = image_chw(jpeg)
+        image = image_chw(jpeg, self._image_size)
         if state is None or image is None:
             return
         torch = self._torch

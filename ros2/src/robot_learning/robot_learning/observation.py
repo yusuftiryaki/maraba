@@ -68,6 +68,18 @@ def checkpoint_state(checkpoint: str, input_features) -> tuple:
         raise ValueError(f"policy_node cannot build state columns {unknown}")
     return names
 
+def checkpoint_image_size(input_features) -> Tuple[int, int]:
+    """(width, height) the checkpoint's camera was trained at — 320x240 for the
+    Pi Camera, 320x160 for the 360° panorama (learning.md 6g). ⚠️ Resizing a
+    panorama to the Pi Camera's 4:3 would stretch it: still an image, silently
+    not the one the policy learned on."""
+    feature = input_features.get("observation.images.front")
+    if feature is None:
+        return IMAGE_SIZE
+    _c, height, width = feature.shape
+    return (int(width), int(height))
+
+
 def image_chw(jpeg: bytes, size: Tuple[int, int] = IMAGE_SIZE) -> Optional[np.ndarray]:
     import cv2
     frame = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)

@@ -121,3 +121,27 @@ def test_the_palette_varies_per_world_but_is_repeatable():
     for seed in range(1, 50):                 # grass stays green, soil stays brown
         p = palette(seed)
         assert p["grass_a"][1] > p["grass_a"][0] and p["soil_a"][0] > p["soil_a"][2]
+
+
+def test_the_panorama_puts_each_trunk_at_its_bearing():
+    """6g: column = azimuth (+180° at the left edge, 0 ahead in the centre,
+    -180° at the right), so a trunk to the robot's left is left of centre."""
+    import math
+
+    from robot_sim.sim_camera import BODY, render_equirect
+
+    width, height = 360, 180
+    for bearing_deg in (0.0, 60.0, -90.0, 150.0):
+        b = math.radians(bearing_deg)
+        trunk = (4.0 * math.cos(b), 4.0 * math.sin(b), 0.2, 1.5)
+        image = render_equirect(width, height, (0.0, 0.0, 2.0, 0.0), (0.0, 0.0, 0.0), [trunk])
+        row = image[height // 2 + 15]               # a little below the horizon: the trunk
+        grey = [i for i, px in enumerate(row) if abs(int(px[0]) - int(px[1])) < 12
+                and abs(int(px[1]) - int(px[2])) < 12 and px[0] > 60]
+        assert grey, f"no trunk in the row at {bearing_deg}°"
+        column = sum(grey) / len(grey)
+        expected = (180.0 - bearing_deg) / 360.0 * width
+        assert abs(column - expected) < 3, (bearing_deg, column, expected)
+    # straight down is the robot's own chassis
+    bottom = render_equirect(width, height, (0.11, 0.0, 2.0, 0.0), (0.0, 0.0, 0.0), [])
+    assert (bottom[-1] == BODY.astype("uint8")).all()

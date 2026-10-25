@@ -71,3 +71,13 @@ def test_the_checkpoint_says_which_state_columns_it_takes(tmp_path):
     (tmp_path / "hoverbot_conversion.json").write_text(json.dumps({"state": ["map.x"]}))
     with pytest.raises(ValueError, match="cannot build"):
         checkpoint_state(str(tmp_path), {"observation.state": _Feature(1)})
+
+
+def test_the_image_size_comes_from_the_checkpoint():
+    from types import SimpleNamespace
+
+    from robot_learning.observation import IMAGE_SIZE, checkpoint_image_size
+
+    pano = {"observation.images.front": SimpleNamespace(shape=(3, 160, 320))}
+    assert checkpoint_image_size(pano) == (320, 160)
+    assert checkpoint_image_size({}) == IMAGE_SIZE

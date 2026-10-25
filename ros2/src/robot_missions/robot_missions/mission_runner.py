@@ -76,6 +76,15 @@ from robot_missions.site import LatLon, SiteError, load_site
 from robot_missions.site_map import NotReady
 from robot_missions_interfaces.srv import StartMission
 
+# A trunk fix this recent and this tight keeps rows in `map` (_row_frame).
+# ⚠️ Not a few seconds: at a corridor's end the camera sees fewer than four
+# trunks for a while, and a 3 s window flipped the frame from leg to leg —
+# MEASURED (test_orchard_stack[trunks]), the odom legs then came out 0.5-0.9 m
+# off their corridor. Between fixes ekf_global holds the trunk-corrected
+# pose, drifting only with the F9P's slow wander (tau ~60 s).
+TRUNK_FRESH_S = 30.0
+TRUNK_SIGMA_M = 0.1
+
 RESULTS = {GoalStatus.STATUS_SUCCEEDED: Result.SUCCEEDED,
            GoalStatus.STATUS_CANCELED: Result.CANCELED,
            GoalStatus.STATUS_ABORTED: Result.ABORTED}
@@ -182,6 +191,10 @@ class MissionRunner(Node):
         # an overheated camera asked again at once would quit again.
         self._camera_hold = False
         self._record = self.create_client(SetBool, "kit_camera/record")
+        # The trunk localizer's last accepted fix (robot_kit trunk_localizer):
+        # like RTK, it pins `map` to centimetres (_row_frame).
+        self._trunks_ok_at = None
+        self.create_subscription(String, "kit/trunk_status", self._on_trunk_status, 10)
         self.create_subscription(String, "kit/camera/status", self._on_camera, 10)
         self.create_service(StartMission, "~/start", self._on_start)
         self.create_service(Trigger, "~/pause", self._command(self._policy.pause))
@@ -259,6 +272,14 @@ class MissionRunner(Node):
             self._camera = json.loads(message.data)
         except ValueError:
             return
+
+    def _on_trunk_status(self, message: String) -> None:
+        try:
+            status = json.loads(message.data)
+        except ValueError:
+            return
+        if status.get("accepted") and (status.get("sigma_m") or 1.0) <= TRUNK_SIGMA_M:
+            self._trunks_ok_at = self._now()
 
     def _manage_camera(self) -> None:
         """Start the scan's camera when it starts driving, stop it at the end,
@@ -715,7 +736,11 @@ class MissionRunner(Node):
         kit = self._kit or {}
         rtk = (kit.get("gps_source") == "kit"
                and (kit.get("gnss") or {}).get("solution") == "rtk_fixed")
-        if rtk and self.get_parameter("rtk_rows_in_map").value:
+        # The trunks do the same job without RTK (docs/kit-soketi.md K2c):
+        # fixes accepted within the last TRUNK_FRESH_S at <= TRUNK_SIGMA_M.
+        trunks = (self._trunks_ok_at is not None
+                  and self._now() - self._trunks_ok_at <= TRUNK_FRESH_S)
+        if (rtk or trunks) and self.get_parameter("rtk_rows_in_map").value:
             return "map"
         return self.get_parameter("odom_frame").value
 

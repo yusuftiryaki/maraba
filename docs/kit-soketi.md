@@ -467,6 +467,25 @@ TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
     tıklamalarıyla eğitilecek) ve kayıt sürerken canlı görüntünün alınabildiği
     SDK'da doğrulanmadı. Pi 4'te süre: masaüstünde kare başına ~30 ms;
     Pi'da ölçülecek (`max_rate_hz` 2).
+- ✅ **K2d — RTK'sız bahçe taraması, gövdelerle** (`test_orchard_stack[trunks]`):
+  gövde düzeltmeleri tazeyken (son 30 sn, σ ≤ 0,1 m) satırlar RTK'daki gibi
+  `map`'te sürülüyor. Ölçülen (3×2 ağaç, F9P tek nokta, NTRIP yok):
+  koridordan sapma p95 **0,23 m** (RTK'da 0,095), konum hatası ortanca
+  0,06 / p95 0,33 m, 24 ağaç yüzünün 23–24'ü görüldü, temas yok.
+  ⚠️ **Yolda bulunanlar:**
+  - Düzeltme bahçenin kenarında kesilince (4'ten az gövde) tahmin 1–2 sn
+    içinde tek noktalı F9P'nin 1–2 m'lik sapmasına kayıyordu (EKF onun
+    yavaş sapmasını beyaz gürültü sanıyor). En az eşleşme 4 → **3** (3 yön +
+    eğim = 6 denklem, 3 bilinmeyen): sapma p95 0,6–0,8 m'den 0,23 m'ye.
+    Sapan düzeltme sıfır kaldı (birim testleri ve 420 karelik kontrol).
+  - `ekf_global`'da gövde pozuna konan **red eşiği (5) kaldırıldı**: sıkı
+    kovaryansla F9P'nin sürüklediği tahmin bir sonraki doğru düzeltmeyi
+    "uzak" sayabiliyordu. Yanlış düzeltmeye karşı koruma yerelleştiricinin
+    kendi kontrolleri (belirsizlik, artık, aykırı ayıklama).
+  - Kalan açık: kenarda düzeltme yokken F9P'nin çekişi. Asıl çözüm tek
+    noktalı F9P'nin kovaryansını gövde düzeltmeleri varken büyütmek; EKF
+    ayarı olduğu için sonraya bırakıldı. Gerçek bahçeler bu 3×2'den büyük,
+    kenarın payı daha küçük.
 
 ## Açık kalanlar
 
