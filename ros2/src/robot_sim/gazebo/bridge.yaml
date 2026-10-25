@@ -70,3 +70,11 @@
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
   lazy: true
+
+# The kit tests' 3-D pose (robot_sim/kit_model.py kit_sdf adds the publisher;
+# the stock model has none, so nothing flows here outside those tests).
+- ros_topic_name: "/gazebo/pose_3d"
+  gz_topic_name: "/model/hoverbot/pose_3d"
+  ros_type_name: "nav_msgs/msg/Odometry"
+  gz_type_name: "gz.msgs.Odometry"
+  direction: GZ_TO_ROS
