@@ -26,6 +26,10 @@ ssh "${PI_HOST}" bash -lc "'
   rosdep install --from-paths src --ignore-src -r -y
   colcon build --symlink-install
   echo \">> build ok\"
+  if ! cmp -s ../deploy/robot.service /etc/systemd/system/robot.service; then
+    echo \"!! /etc/systemd/system/robot.service differs from deploy/robot.service\"
+    echo \"!! (or is not installed): run ./scripts/install_service.sh on the Pi\"
+  fi
 '"
 
 echo ">> done. Restart nodes on the Pi (or the robot.service) to pick up changes."

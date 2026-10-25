@@ -125,8 +125,8 @@ Laptop tarayıcı (uydu haritası)        Pi
   `site_map_server.py` (düğüm).
 - **`robot.launch.py`**: `site_map_server` varsayılan olarak koşar
   (`use_site_map:=true`), `site_file:=` boşsa tamamen serbest harita yayınlar.
-  Sahada `robot.service`'in `ExecStart`'ına `site_file:=/home/enes/site.geojson`
-  eklenir. ⚠️ `/obstacle_map`'in **tek** yayıncısı olmalı: sim'de `sim_node`
+  Sahada `deploy/robot.service` `site_file:=/home/enes/site.geojson` ile
+  kalkar (deployment.md adım 8). ⚠️ `/obstacle_map`'in **tek** yayıncısı olmalı: sim'de `sim_node`
   yayınlıyor, o yüzden testler `use_site_map:=false` geçiyor (`conftest.py`
   `SITE_ARGS`); sahadan gelen bir site dosyasıyla sim koşmak için `sim_node`'a
   `publish_obstacle_map:=false`.

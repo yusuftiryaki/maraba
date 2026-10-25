@@ -757,8 +757,9 @@ Alanlar hem **masada haritadan çizilecek** hem **öğret-kaydet** ile kaydedile
       sonra yeniden bak. DAgger 3. tur toplandı, eğitilmedi (gerek yok).
     - **Sıradaki:** Pi 4'te çıkarım süresi (donanım gelince). Donanım
       tarafında B1 (flash) hâlâ darboğaz.
-  - Sahada ilk kullanım için `robot.service`'e `site_file:=` eklenmeli
-    (deployment.md adım 8).
+  - ✅ `robot.service` artık repoda (`deploy/robot.service`, `site_file:=`
+    ile); Pi'da `./scripts/install_service.sh --now`, `deploy.sh` kurulu kopya
+    farklıysa uyarır (deployment.md adım 8).
 
 ### A5 (CI) — çalışıyor, ve ilk koşuda gerçek bir hata yakaladı
 `scripts/ci.sh` her şeyi koşturur, `.github/workflows/ci.yml` sadece onu
