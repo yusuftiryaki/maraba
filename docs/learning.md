@@ -561,6 +561,41 @@ sayıyor, `/collision_truth`).
   değil klasik yolla yapmak (haritadaki ağacın çevresine Nav2 yolu; NEO-6M'in
   2–5 m hatası buna yetmez, RTK ya da yakın mesafe sensörü ister).
 
+### 6g ✅: ağaç etrafı, kitin 360° kamerasıyla (sim, 2026-10-26)
+6f'nin önerisini dener: ağacı dönüş boyunca gören bir kamera. Kitin 360°
+kamerası (docs/kit-soketi.md) plakada, yerden 2,0 m'de; geri kalan her şey
+6f'nin aynısı (uzman, sahalar 1–9 × 2 yön = 18 bölüm, 5 000 adım ACT, durum
+ivme + `edge.dir`, sahalar 20–22, 90 s).
+- **Sim kamerası:** `sim_camera.render_equirect` — birleştirilmiş 320×160
+  eşdikdörtgen panorama (sütun = açı, +180° solda, 0 ortada), robotun kendi
+  gövdesi altta koyu. `sim_node camera_model:=equirect camera_frame:=kit_mount
+  camera_z_offset:=1.82`; gövdeler `trunk_height_m:=1.5` ile gövde boyunda
+  (6f'de diz boyu çizilmişti — 2 m'den bakan bir kamera onu tepeden görürdü).
+  `edge_batch`/`policy_eval --camera pano`; dışa aktarma
+  `episode_export --image-size 320x160`. `policy_node` görüntü boyutunu artık
+  checkpoint'tan okuyor (panoramayı 4:3'e germek sessiz bir hata olurdu).
+- Kaggle: `hoverbot-tree-pano` veri seti, `hoverbot-tree-pano-train` defteri
+  (T4, ~11 dk); kontrol noktası `~/.robot/policies/act_tree_pano`.
+
+| saha | ccw (ağaç solda) | cw |
+|---|---|---|
+| 20 | **5,9 tur**, hata 4,5 cm, çarpışma 0 | yerinde dönüyor, ağaca hiç varmadı |
+| 21 | **5,1 tur**, hata 7,7 cm, çarpışma 0 | aynı |
+| 22 | gövdeye dayandı (5 temas), sıkışma kapıyı kapattı | aynı |
+
+(6f, ön kamera: ccw %4–6 tur ve 5–10 çarpışma, cw ters yöne.)
+- **Sonuç: 360° kamerayla ağaç etrafı ccw'de öğrenilebiliyor** — 6f'de
+  hiç olmayan şey: politika ağacı dönüş boyunca görüyor ve 90 s'de 5–6 tur
+  atıyor, uzmana yakın hata ve çarpışmasız (iki sahada). Görmediği üçüncü
+  sahada gövdeye dayandı; güvenlik zinciri (sıkışma → kapı) durdurdu.
+- **cw öğrenilmedi:** robot başlangıçta yerinde dönüp ağaca yaklaşmıyor
+  (%98 dönüş). Kenar takibindeki 6d-4'ün yön belirsizliğine benziyor
+  (`edge.dir` durumda ama yaklaşma bölümü iki yönde farklı başlıyor). Sıradaki
+  deneme 6d-5'in DAgger'ı (`dagger_batch --task tree --camera pano`).
+- ⚠️ Kamera simde kusursuz bir birleştirme; gerçekte iki balıkgözü, dikiş,
+  pozlama ve **kayıt sürerken canlı görüntünün SDK'dan alınabilmesi şartı**
+  (doğrulanmadı) var.
+
 ## Sonra: politika robota nasıl takılır
 Algoritma seçilince (adaylar: ACT, Diffusion Policy — ikisi de kamera +
 durum → aksiyon dizisi) öğrenilen politika twist_mux'a teleop ile Nav2
