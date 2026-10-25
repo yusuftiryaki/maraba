@@ -90,6 +90,11 @@ class WebUi(Node):
         self.create_subscription(String, "battery_supervisor/state", self._on_supervisor, latched)
         self.create_subscription(BatteryState, "battery", self._on_battery, 10)
         self.create_subscription(String, "episode_recorder/status", self._on_episode, latched)
+        # The kit socket (robot_kit): the header's kit badge.
+        self._kit = None
+        self._ntrip = None
+        self.create_subscription(String, "kit/state", self._on_kit, latched)
+        self.create_subscription(String, "kit/ntrip/status", self._on_ntrip, latched)
         self._episode_client = self.create_client(Episode, "episode_recorder/command")
         self._tf = Buffer()
         self._tf_listener = TransformListener(self._tf, self)
@@ -164,6 +169,14 @@ class WebUi(Node):
         with self._lock:
             self._episode = json.loads(msg.data)
 
+    def _on_kit(self, msg: String) -> None:
+        with self._lock:
+            self._kit = json.loads(msg.data)
+
+    def _on_ntrip(self, msg: String) -> None:
+        with self._lock:
+            self._ntrip = json.loads(msg.data)
+
     def _on_battery(self, msg: BatteryState) -> None:
         with self._lock:
             self._battery = {
@@ -176,12 +189,13 @@ class WebUi(Node):
         with self._lock:
             fix, mission = self._fix, self._mission
             supervisor, battery, episode = self._supervisor, self._battery, self._episode
+            kit = dict(self._kit, ntrip=self._ntrip) if self._kit is not None else None
         robot = None
         if fix is not None:
             robot = {"lat": fix[0], "lon": fix[1], "age_s": round(time.time() - fix[2], 1),
                      "heading_deg": self._heading()}
         return {"robot": robot, "mission": mission, "supervisor": supervisor,
-                "battery": battery, "episode": episode}
+                "battery": battery, "episode": episode, "kit": kit}
 
     def _pose2(self, parent: str, child: str) -> Optional[Pose2]:
         try:

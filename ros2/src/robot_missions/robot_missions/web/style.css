@@ -15,6 +15,10 @@ body { display: flex; }
 header { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 #status-line { font-weight: 600; }
 #battery { color: var(--muted); }
+#kit { font-size: 0.85em; padding: 1px 6px; border-radius: 4px; cursor: help; }
+#kit.kit-none { color: var(--muted); }
+#kit.kit-ready { background: #1b5e20; color: #fff; }
+#kit.kit-degraded { background: #e65100; color: #fff; }
 nav { display: flex; gap: 4px; margin-bottom: 12px; }
 nav button { flex: 1; }
 nav button.active { background: var(--accent); color: white; border-color: var(--accent); }

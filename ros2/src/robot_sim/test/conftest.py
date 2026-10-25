@@ -200,7 +200,7 @@ STACK_PATTERNS = (
     # the kit socket: an orphan selector would publish a second /gps/fix, an
     # orphan kit_manager a stale latched kit/state
     "lib/robot_kit/kit_manager", "lib/robot_kit/kit_gnss", "lib/robot_kit/gps_selector",
-    "lib/robot_kit/ntrip_client",
+    "lib/robot_kit/ntrip_client", "lib/robot_kit/kit_camera", "lib/robot_kit/fake_camera_shim",
 )
 
 
@@ -409,9 +409,12 @@ class KitStack(GlobalStack):
 
     GNSS_LINK = "/tmp/fake_kit_gnss_test"
 
-    def __init__(self, workdir, *sim_args, ntrip_file=""):
+    FAKE_CAMERA = "ros2 run robot_kit fake_camera_shim"
+
+    def __init__(self, workdir, *sim_args, ntrip_file="", camera_shim=""):
         self.kit_dir = os.path.join(workdir, "kit")
         self.ntrip_file = ntrip_file or os.path.join(workdir, "no-ntrip.yaml")
+        self.camera_shim = camera_shim
         from robot_kit.hw import write_fake
         write_fake(self.kit_dir, False, None)
         super().__init__("--ros-args", "-r", "gps/fix:=gps/neo6m/fix",
@@ -421,7 +424,9 @@ class KitStack(GlobalStack):
 
     def launch_args(self):
         return (*super().launch_args(), "use_kit:=true", f"kit_fake_dir:={self.kit_dir}",
-                f"kit_gnss_port:={self.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}")
+                f"kit_gnss_port:={self.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}",
+                # ⚠️ only when set: `name:=` with nothing after it is a launch error
+                *((f"kit_camera_shim:={self.camera_shim}",) if self.camera_shim else ()))
 
 
 @pytest.fixture
@@ -695,6 +700,68 @@ class SiteNav2Stack(Nav2Stack):
 
     def _pin_map(self):
         """No pin: ekf_global publishes map->odom."""
+
+
+class SiteKitNav2Stack(SiteNav2Stack):
+    """SiteNav2Stack with the kit socket on, KitStack's way: missions on a site
+    with a (fake) orchadOS kit plugged in or pulled out mid-mission."""
+
+    def __init__(self, workdir, features, *sim_args, ntrip_file="", camera_shim=""):
+        self.kit_dir = os.path.join(workdir, "kit")
+        self.ntrip_file = ntrip_file or os.path.join(workdir, "no-ntrip.yaml")
+        self.camera_shim = camera_shim
+        from robot_kit.hw import write_fake
+        write_fake(self.kit_dir, False, None)
+        super().__init__(workdir, features, "-r", "gps/fix:=gps/neo6m/fix",
+                         "-r", "gps/vel:=gps/neo6m/vel",
+                         "-p", f"kit_gnss_link:={KitStack.GNSS_LINK}",
+                         "-p", f"kit_fake_dir:={self.kit_dir}", *sim_args)
+
+    def launch_args(self):
+        return (*super().launch_args(), "use_kit:=true", f"kit_fake_dir:={self.kit_dir}",
+                f"kit_gnss_port:={KitStack.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}",
+                *((f"kit_camera_shim:={self.camera_shim}",) if self.camera_shim else ()))
+
+
+@pytest.fixture
+def site_kit_nav2_stack(ros, tmp_path):
+    made = []
+
+    def _make(features, *sim_args, **kwargs):
+        stack = SiteKitNav2Stack(str(tmp_path), features, *sim_args, **kwargs)
+        made.append(stack)
+        return stack
+
+    yield _make
+    for stack in made:
+        stack.close()
+
+
+CASTER_PORT = 12101
+
+
+@pytest.fixture
+def ntrip_caster(tmp_path):
+    """robot_kit's fake NTRIP caster on CASTER_PORT, in this process; yields
+    the ntrip.yaml that points ntrip_client at it."""
+    import threading
+
+    from robot_kit.fake_kit import serve_caster
+
+    stop, ready = threading.Event(), threading.Event()
+    thread = threading.Thread(
+        target=serve_caster,
+        kwargs=dict(port=CASTER_PORT, mountpoint="TEST", rate_hz=2.0, chunked=True,
+                    stop=stop, ready=ready, log=lambda *_: None),
+        daemon=True)
+    thread.start()
+    assert ready.wait(5.0), "fake caster did not start"
+    path = os.path.join(str(tmp_path), "ntrip.yaml")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(f"host: 127.0.0.1\nport: {CASTER_PORT}\nmountpoint: TEST\n")
+    yield path
+    stop.set()
+    thread.join(timeout=5.0)
 
 
 class SiteDockStack(SiteNav2Stack):

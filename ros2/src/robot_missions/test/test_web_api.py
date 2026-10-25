@@ -164,7 +164,7 @@ def test_a_broken_site_is_refused_and_the_file_is_untouched(web):
 def test_task_types_describe_the_form(web):
     call, *_ = web
     status, types = call("GET", "/api/task_types")
-    assert status == 200 and set(types) == {"coverage", "patrol", "route", "goto"}
+    assert status == 200 and set(types) == {"coverage", "orchard_grid", "patrol", "route", "goto"}
     overlap = types["coverage"]["params"]["overlap"]
     assert overlap["kind"] == "float" and overlap["high"] == 0.9
     assert types["patrol"]["params"]["mode"]["choices"] == ["perimeter", "random"]

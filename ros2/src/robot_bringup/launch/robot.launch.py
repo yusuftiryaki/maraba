@@ -96,6 +96,7 @@ def generate_launch_description():
     kit_fake_dir = LaunchConfiguration("kit_fake_dir")
     kit_gnss_port = LaunchConfiguration("kit_gnss_port")
     ntrip_file = LaunchConfiguration("ntrip_file")
+    kit_camera_shim = LaunchConfiguration("kit_camera_shim")
     web_port = LaunchConfiguration("web_port")
 
     return LaunchDescription([
@@ -204,6 +205,11 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("kit_gnss_port", default_value="/dev/kit_gnss"),
         DeclareLaunchArgument(
+            "kit_camera_shim", default_value="",
+            description="The 360° camera's SDK shim command (robot_kit/camera.py). "
+                        "Empty: ~/.robot/sdk/kit_camera_shim if present.",
+        ),
+        DeclareLaunchArgument(
             "ntrip_file", default_value=os.path.expanduser("~/.robot/ntrip.yaml"),
             description="The NTRIP caster (YAML). Missing: the kit runs without RTK.",
         ),
@@ -304,6 +310,7 @@ def generate_launch_description():
             condition=IfCondition(use_kit),
             launch_arguments={"use_sim_time": use_sim_time, "kit_fake_dir": kit_fake_dir,
                               "kit_gnss_port": kit_gnss_port,
+                              "kit_camera_shim": kit_camera_shim,
                               "ntrip_file": ntrip_file}.items(),
         ),
 

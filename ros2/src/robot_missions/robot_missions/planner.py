@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from shapely import affinity
-from shapely.geometry import LineString, MultiPolygon, Point, Polygon
+from shapely.geometry import LineString, MultiPoint, MultiPolygon, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
@@ -169,6 +169,27 @@ def coverage(region: BaseGeometry, spacing: float, angle: Optional[float] = None
         raise PlanError(f"no row of the area is longer than {min_segment} m")
 
     here = _rotate(start, -angle) if start is not None else segments[0][1]
+    flat_waypoints, rows_used, _ = _chain(segments, here)
+    waypoints = [Waypoint(*_rotate((x, y), angle), yaw + angle, work)
+                 for x, y, yaw, work in flat_waypoints]
+    work_length = sum(math.hypot(r[0] - l[0], r[1] - l[1]) for _, l, r in segments)
+    info = {"rows": float(len(rows_used)), "segments": float(len(segments)),
+            "row_length_m": work_length, "angle_rad": angle, "spacing_m": spacing,
+            "region_area_m2": region.area}
+    if perimeter_pass:
+        edge = _perimeter_waypoints(region, perimeter_step, (waypoints[-1].x, waypoints[-1].y))
+        if edge:
+            edge[0] = Waypoint(edge[0].x, edge[0].y, edge[0].yaw, work=False)
+            waypoints.extend(edge)
+            info["perimeter_m"] = sum(p.exterior.length + sum(i.length for i in p.interiors)
+                                      for p in polygons_of(region))
+    return Plan("coverage", tuple(_wrap_yaws(waypoints)), repeat=1, info=info, precise=True)
+
+
+def _chain(segments: Sequence[Tuple[int, XY, XY]], here: XY):
+    """Greedy chaining (coverage's): from `here`, the nearest unvisited segment
+    end, entered there, driven to the other end. Returns the (x, y, yaw, work)
+    waypoints, the rows used, and where it ends."""
     flat_waypoints: List[Tuple[float, float, float, bool]] = []
     remaining = list(range(len(segments)))
     rows_used = set()
@@ -184,21 +205,140 @@ def coverage(region: BaseGeometry, spacing: float, angle: Optional[float] = None
         flat_waypoints.append((enter[0], enter[1], heading, False))
         flat_waypoints.append((leave[0], leave[1], heading, True))
         here = leave
+    return flat_waypoints, rows_used, here
 
-    waypoints = [Waypoint(*_rotate((x, y), angle), yaw + angle, work)
-                 for x, y, yaw, work in flat_waypoints]
-    work_length = sum(math.hypot(r[0] - l[0], r[1] - l[1]) for _, l, r in segments)
-    info = {"rows": float(len(rows_used)), "segments": float(len(segments)),
-            "row_length_m": work_length, "angle_rad": angle, "spacing_m": spacing,
-            "region_area_m2": region.area}
-    if perimeter_pass:
-        edge = _perimeter_waypoints(region, perimeter_step, (waypoints[-1].x, waypoints[-1].y))
-        if edge:
-            edge[0] = Waypoint(edge[0].x, edge[0].y, edge[0].yaw, work=False)
-            waypoints.extend(edge)
-            info["perimeter_m"] = sum(p.exterior.length + sum(i.length for i in p.interiors)
-                                      for p in polygons_of(region))
-    return Plan("coverage", tuple(_wrap_yaws(waypoints)), repeat=1, info=info, precise=True)
+
+# --- orchard grid scan ------------------------------------------------------------
+
+def tree_rows(values: Sequence[float], gap: float) -> List[float]:
+    """1-D clustering: sorted coordinates split wherever the jump exceeds `gap`;
+    the mean of each cluster. A planted row wanders a few decimetres, its
+    neighbour is metres away."""
+    ordered = sorted(values)
+    if not ordered:
+        return []
+    rows, current = [], [ordered[0]]
+    for value in ordered[1:]:
+        if value - current[-1] > gap:
+            rows.append(sum(current) / len(current))
+            current = []
+        current.append(value)
+    rows.append(sum(current) / len(current))
+    return rows
+
+
+def corridor_offsets(rows: Sequence[float], outer: bool) -> List[float]:
+    """Midway between neighbouring tree rows; with `outer`, also half a typical
+    spacing outside the first and last row (so the outermost trees are seen
+    from their outer side too)."""
+    if len(rows) < 2:
+        return list(rows) if outer else []
+    lines = [(a + b) / 2.0 for a, b in zip(rows, rows[1:])]
+    if outer:
+        spacing = sorted(b - a for a, b in zip(rows, rows[1:]))[(len(rows) - 1) // 2]
+        lines = [rows[0] - spacing / 2.0, *lines, rows[-1] + spacing / 2.0]
+    return lines
+
+
+def orchard_grid(region: BaseGeometry, trees: Sequence[XY], angle: Optional[float] = None,
+                 directions: str = "both", outer: bool = True, start: Optional[XY] = None,
+                 min_segment: float = 1.0, row_gap: Optional[float] = None) -> Plan:
+    """The orchadOS grid scan (docs/kit-soketi.md): corridors midway between the
+    tree rows, along the rows and — with directions "both" — across them too,
+    so every tree is passed on all four sides and seen by the 360° camera from
+    each. The kit's camera does the work; the robot only drives the corridors.
+
+    angle: the rows' direction in `map` (rad); None = the long side of the
+    trees' minimum rotated rectangle (an orchard is planted square to itself).
+    Corridors are clipped to `region` (the area minus every tree grown by the
+    robot's clearance), so a corridor that a missing tree's neighbours narrow
+    still comes out right; segments under `min_segment` are dropped.
+    """
+    if len(trees) < 2:
+        raise PlanError(f"an orchard grid needs the trees (got {len(trees)}): mark them as "
+                        "'ağaç' points in the site")
+    if directions not in ("both", "one"):
+        raise PlanError(f"directions must be 'both' or 'one', got {directions!r}")
+    if angle is None:
+        hull = MultiPoint(list(trees)).convex_hull
+        if isinstance(hull, Polygon):
+            angle = _refine_angle(trees, auto_angle(hull))
+        else:                              # one straight row of trees
+            (x0, y0), (x1, y1) = hull.coords[0], hull.coords[-1]
+            angle = math.atan2(y1 - y0, x1 - x0)
+    passes = [angle] if directions == "one" else [angle, angle + math.pi / 2]
+    segments: List[Tuple[int, XY, XY]] = []
+    corridors = 0
+    for k, a in enumerate(passes):
+        flat_trees = [_rotate(t, -a) for t in trees]
+        ys = [y for _, y in flat_trees]
+        gap = row_gap if row_gap is not None else max(1.0, _typical_gap(ys) / 2.0)
+        lines = corridor_offsets(tree_rows(ys, gap), outer)
+        flat = affinity.rotate(region, -a, origin=(0.0, 0.0), use_radians=True)
+        min_x, _min_y, max_x, _max_y = flat.bounds
+        for line_no, y in enumerate(lines):
+            line = LineString([(min_x - 1.0, y), (max_x + 1.0, y)])
+            pieces = [p for p in _lines_of(flat.intersection(line)) if p.length >= min_segment]
+            corridors += 1 if pieces else 0
+            for piece in pieces:
+                (ax, ay), (bx, by) = piece.coords[0], piece.coords[-1]
+                left, right = (ax, ay), (bx, by)
+                if ax > bx:
+                    left, right = right, left
+                segments.append((k * 10000 + line_no, _rotate(left, a), _rotate(right, a)))
+    if not segments:
+        raise PlanError("no corridor between the tree rows is inside the area")
+    # Chain in map coordinates: segments of both passes, nearest end first.
+    here = start if start is not None else segments[0][1]
+    flat_waypoints, _rows, _end = _chain(segments, here)
+    waypoints = [Waypoint(x, y, yaw, work) for x, y, yaw, work in flat_waypoints]
+    length = sum(_dist(l, r) for _, l, r in segments)
+    info = {"corridors": float(corridors), "segments": float(len(segments)),
+            "corridor_length_m": length, "angle_rad": angle, "trees": float(len(trees))}
+    return Plan("orchard_grid", tuple(_wrap_yaws(waypoints)), repeat=1, info=info, precise=True)
+
+
+def _row_scatter(trees: Sequence[XY], angle: float) -> Tuple[int, float]:
+    """How well the trees line up at `angle`: (rows + columns found, their
+    summed within-row variance). Fewest rows first — at a wrong angle every
+    tree is a "row" of its own, which has no variance at all."""
+    count, total = 0, 0.0
+    for a in (angle, angle + math.pi / 2):
+        ys = sorted(_rotate(t, -a)[1] for t in trees)
+        gap = max(1.0, _typical_gap(ys) / 2.0)
+        cluster = [ys[0]]
+        for y in ys[1:] + [math.inf]:
+            if y - cluster[-1] > gap:
+                mean = sum(cluster) / len(cluster)
+                total += sum((v - mean) ** 2 for v in cluster)
+                count += 1
+                cluster = []
+            cluster.append(y)
+    return count, total
+
+
+def _refine_angle(trees: Sequence[XY], guess: float, span_deg: float = 10.0,
+                  step_deg: float = 0.25) -> float:
+    """The hull's rectangle is only a guess: one tree planted half a metre off
+    tilts it by a degree, and over a 100 m corridor a degree is 1.7 m — a
+    corridor that starts midway ends against a trunk. The rows' own direction
+    is the angle at which the trees line up best."""
+    steps = int(span_deg / step_deg)
+    best = min((guess + math.radians(k * step_deg) for k in range(-steps, steps + 1)),
+               key=lambda a: _row_scatter(trees, a))
+    while best <= -math.pi / 2:
+        best += math.pi
+    while best > math.pi / 2:
+        best -= math.pi
+    return best
+
+
+def _typical_gap(values: Sequence[float]) -> float:
+    """The row spacing hidden in projected tree coordinates: the median of the
+    jumps that are clearly not within-row scatter."""
+    ordered = sorted(values)
+    jumps = sorted(b - a for a, b in zip(ordered, ordered[1:]) if b - a > 0.5)
+    return jumps[len(jumps) // 2] if jumps else 2.0
 
 
 # --- patrol ---------------------------------------------------------------------
