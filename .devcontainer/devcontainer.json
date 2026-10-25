@@ -34,7 +34,10 @@
   // Both are bind-mounted read-write, so a login/logout in either side is shared.
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/ubuntu/.claude,type=bind",
-    "source=${localEnv:HOME}/.claude.json,target=/home/ubuntu/.claude.json,type=bind"
+    "source=${localEnv:HOME}/.claude.json,target=/home/ubuntu/.claude.json,type=bind",
+    // Sibling repos (orchadOS, the 360° camera SDKs), read-only: designs here
+    // reference them (docs/kit-soketi.md). Must exist on the host.
+    "source=${localEnv:HOME}/repos,target=/home/ubuntu/repos,type=bind,readonly"
   ],
 
   "customizations": {
