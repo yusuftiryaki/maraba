@@ -1,5 +1,5 @@
 """The kit socket (docs/kit-soketi.md): kit_manager, kit_gnss, gps_selector,
-ntrip_client, kit_camera.
+ntrip_client, kit_camera, trunk_localizer.
 
 Included by robot.launch.py with use_kit:=true. Nothing here is on the motor
 command path: speed limits, the watchdog and the deadman do not change with
@@ -27,6 +27,7 @@ def generate_launch_description():
     gnss_port = LaunchConfiguration("kit_gnss_port")
     ntrip_file = LaunchConfiguration("ntrip_file")
     camera_shim = LaunchConfiguration("kit_camera_shim")
+    site_file = LaunchConfiguration("site_file")
 
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="false"),
@@ -38,6 +39,8 @@ def generate_launch_description():
         # The Camera SDK shim (robot_kit/camera.py). Empty: ~/.robot/sdk/kit_camera_shim
         # if it exists; the fake: "ros2 run robot_kit fake_camera_shim".
         DeclareLaunchArgument("kit_camera_shim", default_value=""),
+        # The site's trees (poi "ağaç") for trunk_localizer; empty = no trees.
+        DeclareLaunchArgument("site_file", default_value=""),
 
         Node(
             package="robot_kit", executable="kit_manager", name="kit_manager",
@@ -58,6 +61,14 @@ def generate_launch_description():
         Node(
             package="robot_kit", executable="kit_camera", name="kit_camera", output="screen",
             parameters=[{"shim_command": camera_shim, "use_sim_time": use_sim_time}],
+            respawn=True, respawn_delay=2.0,
+        ),
+        # The pose from the trunks the 360° camera sees (docs/kit-soketi.md) ->
+        # ekf_global's pose0 (ekf.yaml). Idle without trees or detections.
+        Node(
+            package="robot_kit", executable="trunk_localizer", name="trunk_localizer",
+            output="screen",
+            parameters=[{"site_file": site_file, "use_sim_time": use_sim_time}],
             respawn=True, respawn_delay=2.0,
         ),
         Node(

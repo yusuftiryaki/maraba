@@ -398,35 +398,47 @@ def global_stack(ros):
         stack.close()
 
 
+KIT_GNSS_LINK = "/tmp/fake_kit_gnss_test"
+
+
+def kit_setup(stack, workdir, ntrip_file="", camera_shim=""):
+    """The kit socket on a stack (KitStack, SiteKitStack, SiteKitNav2Stack):
+    fake_kit's files in `kit_dir` (nothing plugged yet — the test plugs, with
+    robot_kit.hw.write_fake), sim_node's F9P on a pty and the NEO-6M moved to
+    gps/neo6m/*, as robot.launch.py's use_kit does on the robot. Returns the
+    sim_node arguments it needs."""
+    from robot_kit.hw import write_fake
+
+    stack.kit_dir = os.path.join(workdir, "kit")
+    stack.ntrip_file = ntrip_file or os.path.join(workdir, "no-ntrip.yaml")
+    stack.camera_shim = camera_shim
+    write_fake(stack.kit_dir, False, None)
+    return ("-r", "gps/fix:=gps/neo6m/fix", "-r", "gps/vel:=gps/neo6m/vel",
+            "-p", f"kit_gnss_link:={KIT_GNSS_LINK}", "-p", f"kit_fake_dir:={stack.kit_dir}")
+
+
+def kit_launch_args(stack):
+    return ("use_kit:=true", f"kit_fake_dir:={stack.kit_dir}",
+            f"kit_gnss_port:={KIT_GNSS_LINK}", f"ntrip_file:={stack.ntrip_file}",
+            # ⚠️ only when set: `name:=` with nothing after it is a launch error
+            *((f"kit_camera_shim:={stack.camera_shim}",) if stack.camera_shim else ()))
+
+
 class KitStack(GlobalStack):
     """GlobalStack with the kit socket on (docs/kit-soketi.md): kit_manager reads
-    fake_kit's files in `kit_dir`, sim_node runs the kit's F9P on a pty and the
-    robot's own NEO-6M moves to gps/neo6m/* — gps_selector is the one
-    publisher of gps/fix, as on the robot with use_kit:=true.
+    fake_kit's files, sim_node runs the kit's F9P, gps_selector is the one
+    publisher of gps/fix (kit_setup). `ntrip_file` names the caster the test
+    runs (or none); `camera_shim` the 360° camera's (FAKE_CAMERA or none)."""
 
-    Nothing is plugged at start; the test plugs (robot_kit.hw.write_fake).
-    `ntrip_file` names the caster the test runs (or none)."""
-
-    GNSS_LINK = "/tmp/fake_kit_gnss_test"
-
+    GNSS_LINK = KIT_GNSS_LINK
     FAKE_CAMERA = "ros2 run robot_kit fake_camera_shim"
 
     def __init__(self, workdir, *sim_args, ntrip_file="", camera_shim=""):
-        self.kit_dir = os.path.join(workdir, "kit")
-        self.ntrip_file = ntrip_file or os.path.join(workdir, "no-ntrip.yaml")
-        self.camera_shim = camera_shim
-        from robot_kit.hw import write_fake
-        write_fake(self.kit_dir, False, None)
-        super().__init__("--ros-args", "-r", "gps/fix:=gps/neo6m/fix",
-                         "-r", "gps/vel:=gps/neo6m/vel",
-                         "-p", f"kit_gnss_link:={self.GNSS_LINK}",
-                         "-p", f"kit_fake_dir:={self.kit_dir}", *sim_args)
+        kit_args = kit_setup(self, workdir, ntrip_file, camera_shim)
+        super().__init__("--ros-args", *kit_args, *sim_args)
 
     def launch_args(self):
-        return (*super().launch_args(), "use_kit:=true", f"kit_fake_dir:={self.kit_dir}",
-                f"kit_gnss_port:={self.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}",
-                # ⚠️ only when set: `name:=` with nothing after it is a launch error
-                *((f"kit_camera_shim:={self.camera_shim}",) if self.camera_shim else ()))
+        return (*super().launch_args(), *kit_launch_args(self))
 
 
 @pytest.fixture
@@ -467,6 +479,31 @@ class SiteStack(GlobalStack):
     # The web page only where a test asks for it (WebStack): two stacks in a
     # row would otherwise race for the port.
     WEB_ARGS = ("use_web:=false",)
+
+
+class SiteKitStack(SiteStack):
+    """SiteStack (a site file, no Nav2) with the kit socket on (kit_setup)."""
+
+    def __init__(self, workdir, features, *sim_args, ntrip_file="", camera_shim=""):
+        kit_args = kit_setup(self, workdir, ntrip_file, camera_shim)
+        super().__init__(workdir, features, *kit_args, *sim_args)
+
+    def launch_args(self):
+        return (*super().launch_args(), *kit_launch_args(self))
+
+
+@pytest.fixture
+def site_kit_stack(ros, tmp_path):
+    made = []
+
+    def _make(features, *sim_args, **kwargs):
+        stack = SiteKitStack(str(tmp_path), features, *sim_args, **kwargs)
+        made.append(stack)
+        return stack
+
+    yield _make
+    for stack in made:
+        stack.close()
 
 
 def write_site(workdir, features):
@@ -703,24 +740,15 @@ class SiteNav2Stack(Nav2Stack):
 
 
 class SiteKitNav2Stack(SiteNav2Stack):
-    """SiteNav2Stack with the kit socket on, KitStack's way: missions on a site
-    with a (fake) orchadOS kit plugged in or pulled out mid-mission."""
+    """SiteNav2Stack with the kit socket on (kit_setup): missions on a site with
+    a (fake) orchadOS kit plugged in or pulled out mid-mission."""
 
     def __init__(self, workdir, features, *sim_args, ntrip_file="", camera_shim=""):
-        self.kit_dir = os.path.join(workdir, "kit")
-        self.ntrip_file = ntrip_file or os.path.join(workdir, "no-ntrip.yaml")
-        self.camera_shim = camera_shim
-        from robot_kit.hw import write_fake
-        write_fake(self.kit_dir, False, None)
-        super().__init__(workdir, features, "-r", "gps/fix:=gps/neo6m/fix",
-                         "-r", "gps/vel:=gps/neo6m/vel",
-                         "-p", f"kit_gnss_link:={KitStack.GNSS_LINK}",
-                         "-p", f"kit_fake_dir:={self.kit_dir}", *sim_args)
+        kit_args = kit_setup(self, workdir, ntrip_file, camera_shim)
+        super().__init__(workdir, features, *kit_args, *sim_args)
 
     def launch_args(self):
-        return (*super().launch_args(), "use_kit:=true", f"kit_fake_dir:={self.kit_dir}",
-                f"kit_gnss_port:={KitStack.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}",
-                *((f"kit_camera_shim:={self.camera_shim}",) if self.camera_shim else ()))
+        return (*super().launch_args(), *kit_launch_args(self))
 
 
 @pytest.fixture

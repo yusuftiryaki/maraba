@@ -18,6 +18,7 @@
   <exec_depend>hoverboard_bridge</exec_depend>
   <!-- the kit's fake F9P (kit_gnss_link) -->
   <exec_depend>robot_kit</exec_depend>
+  <exec_depend>robot_missions_interfaces</exec_depend>
   <!-- For earth_field: the simulated magnetic field has ONE definition, and it
        lives with the magnetometer driver. See A6 in docs/handoff.md. -->
   <exec_depend>qmc5883l_driver</exec_depend>

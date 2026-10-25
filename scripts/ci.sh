@@ -26,7 +26,7 @@ REPORTS="${WS}/log/ci"          # ros2/log/ is already gitignored
 
 NAV2_TESTS=(src/robot_sim/test/test_nav2.py src/robot_sim/test/test_site_nav2.py)
 GAZEBO_TESTS=(src/robot_sim/test/test_gazebo_physics.py src/robot_sim/test/test_gazebo_marker.py
-              src/robot_sim/test/test_gazebo_localization.py)
+              src/robot_sim/test/test_gazebo_localization.py src/robot_sim/test/test_gazebo_kit.py)
 DOCK_TESTS=(src/robot_sim/test/test_docking.py)
 SWEEP_TESTS=(src/robot_sim/test/test_docking_sweep.py)
 MISSION_TESTS=(src/robot_sim/test/test_mission_coverage.py src/robot_sim/test/test_mission_dock.py

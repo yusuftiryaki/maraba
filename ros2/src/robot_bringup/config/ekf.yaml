@@ -128,6 +128,24 @@ ekf_global:
     odom1_differential: false
     odom1_relative: false
 
+    # The pose from the trunks the kit's 360° camera sees (robot_kit
+    # trunk_localizer; docs/kit-soketi.md): x, y AND yaw, in map. Silent
+    # without a kit, trees in the site and a detector — then this costs
+    # nothing. The yaw is the point as much as the position: it is the one
+    # heading this robot has that does not come from the compass.
+    # ⚠️ rejection: a fix more than this many Mahalanobis distances from the
+    # estimate is dropped — the last line against a fix a row over.
+    pose0: kit/trunk_pose
+    pose0_config: [true,  true,  false,
+                   false, false, true,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    pose0_queue_size: 5
+    pose0_differential: false
+    pose0_relative: false
+    pose0_rejection_threshold: 5.0
+
     # ⚠️ imu/data — the MADGWICK-FUSED IMU, with a real orientation in it,
     # because ABSOLUTE YAW IS ON HERE (index 5). This is the whole point of the
     # magnetometer: without it, nothing observes heading, ekf_global's yaw is

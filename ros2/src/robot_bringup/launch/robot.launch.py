@@ -311,6 +311,7 @@ def generate_launch_description():
             launch_arguments={"use_sim_time": use_sim_time, "kit_fake_dir": kit_fake_dir,
                               "kit_gnss_port": kit_gnss_port,
                               "kit_camera_shim": kit_camera_shim,
+                              "site_file": site_file,
                               "ntrip_file": ntrip_file}.items(),
         ),
 

@@ -77,6 +77,10 @@ def generate_launch_description():
     bridge = os.path.join(sim_share, "gazebo", "bridge.yaml")
 
     gui = LaunchConfiguration("gui")
+    # Test overrides (test_gazebo_kit.py): the model with the kit's mast on it,
+    # a world with gravity tilted. Empty = the stock files above.
+    model_file = LaunchConfiguration("model_file")
+    world_override = LaunchConfiguration("world_file")
     # ⚠️ Both the world NAME (used to address gz services and to build the
     # contact sensor's topic) and the model NAME are baked into bridge.yaml's
     # gz topic paths. test_gazebo_config.py checks they still agree.
@@ -87,6 +91,8 @@ def generate_launch_description():
         DeclareLaunchArgument("gui", default_value="false"),
         DeclareLaunchArgument("world", default_value="empty"),
         DeclareLaunchArgument("model_name", default_value="hoverbot"),
+        DeclareLaunchArgument("model_file", default_value=model),
+        DeclareLaunchArgument("world_file", default_value=world_file),
 
         DeclareLaunchArgument(
             "camera", default_value="false",
@@ -94,9 +100,10 @@ def generate_launch_description():
                         "(software rendering here: no GPU). Off for the physics tests.",
         ),
         OpaqueFunction(function=lambda context: [ExecuteProcess(
-            cmd=(["gz", "sim", "-s", "-r", "--headless-rendering", world_with_sensors(world_file)]
+            cmd=(["gz", "sim", "-s", "-r", "--headless-rendering",
+                  world_with_sensors(world_override.perform(context))]
                  if LaunchConfiguration("camera").perform(context) == "true"
-                 else ["gz", "sim", "-s", "-r", world_file]),
+                 else ["gz", "sim", "-s", "-r", world_override.perform(context)]),
             output="screen")]),
         ExecuteProcess(cmd=["gz", "sim", "-g"], output="screen",
                        condition=IfCondition(gui)),
@@ -105,7 +112,7 @@ def generate_launch_description():
             Node(
                 package="ros_gz_sim",
                 executable="create",
-                arguments=["-world", world, "-file", model, "-name", model_name],
+                arguments=["-world", world, "-file", model_file, "-name", model_name],
                 output="screen",
             ),
             Node(

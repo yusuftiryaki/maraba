@@ -89,20 +89,40 @@ frame'i. Bu nokta şasinin ortası ve aynı zamanda destek alanının ortası.
 Destek alanı, tekerlek ekseni (x = 0) ile sarhoş tekerlekler (x = +0,22)
 arasında kalıyor.
 
-**Neden burası: devrilme payı.** Kaba bir hesap, ölçülmedi. Robot ~17 kg ve
-ağırlık merkezi ~0,12 m yüksekte. Kit ~4,5 kg ve ağırlık merkezi, akü direğin
-dibinde olursa ~0,9 m yüksekte.
+**Neden burası: devrilme payı.** İlk hesap kabaydı (robot 17 kg tek nokta,
+x = 0,11'de, "~21°"). K2b'de `robot_sim/kit_model.py` ile URDF'in kütleleriyle
+yeniden hesaplandı ve Gazebo'da ölçüldü (`test_gazebo_kit.py`). URDF: şasi
+12 kg (merkezi x = 0,11), tekerlekler 2×2,5 kg aks üstünde (x = 0), sarhoş
+tekerlekler önde (x = 0,22). Tekerleklerin kütlesi aksta olduğu için robotun
+ortak ağırlık merkezi x = 0,08'e geliyor ve **zayıf taraf arka** (aks çizgisi):
 
-| Plaka yeri | Ortak ağırlık merkezi | Öne/arkaya devrilme eğimi | Yana |
-|---|---|---|---|
-| Kit yok | x = 0,11, h = 0,12 m | ~42° | ~59° |
-| **Şasi ortası (x = +0,11)** | **x = 0,11, h ≈ 0,28 m** | **~21°** | **~35°** |
-| Robotun kendi direğinin yeri (x = −0,15) | x ≈ 0,06, h ≈ 0,28 m | **arkaya ~11°** | — |
+| Durum | Ağırlık merkezi (x, h) | Arkaya (burun yukarı) | Öne (burun aşağı) | Kalkış / fren ivmesi |
+|---|---|---|---|---|
+| Kit yok | 0,08 / 0,12 m | 31,9° | 48,7° | 0,62 g / 1,14 g |
+| **Kit, plaka şasi ortasında (x = 0,11)** | **0,08 / 0,29 m** | **16,4°** | **25,3°** | **0,29 g / 0,47 g** |
+| Kit, robotun kendi direğinin yerinde (x = −0,15) | 0,03 / 0,29 m | **6,0°** | 33,5° | 0,10 g / 0,66 g |
 
-- Ortada 21° pay var. Fıstık bahçelerindeki eğimler bunun altında kalıyor, bu da
-  "hız limiti değişmesin" kararını destekliyor. Fren ivmesi açısından da bu pay
-  ~0,39 g ediyor; robotun 0,5 m/s'den durması bunun çok altında kalır.
-- **Plaka arkaya kayarsa pay yarıya iner.** Kaymaması gereken tek ölçü bu.
+**Gazebo'da ölçülen** (URDF'in sarhoş tekerlek düzeni ve kütleleri, tekerlek
+sürtünmesi μ 0,5, yerçekimi eğilerek eğim):
+- 12° yokuşta burun yukarı **duruyor**, 22°'de **arkaya devriliyor** (şasinin
+  kuyruğu yere değiyor); 20° yokuşta burun aşağı duruyor. Elle hesap 16,4° ve
+  25,3° diyordu; fizik bununla tutarlı.
+- **Sert kalkış** (0 → 0,5 m/s basamak, ölçülen 0,46 g): kitle **ön tekerlekler
+  kalkıyor** (burun 1,25° yukarı, sonra geri iniyor); kitsiz kalkmıyor
+  (0,33 g'de 0,02°). Sert duruş (0,33 g) kitle de bir şey yapmıyor (fren payı
+  0,47 g).
+- ⚠️ **Sonuç:** Eğim tarafında "hız limiti değişmesin" kararı tutuyor (16°'nin
+  altındaki eğimlerde). Ama **ivme limiti yok**: köprüde de firmware'de de bir
+  rampa bulunmuyor, ve kitle sert bir kalkış öndeki tekerlekleri kaldırıyor.
+  Düz zeminde geri iniyor; taşlı arazide ya da arkaya doğru eğimde bu,
+  devrilmenin başladığı hareket. **Karar bekliyor** (aşağıda "Açık kalanlar").
+- Plakayı öne almak biraz yardım ediyor ama çözmüyor: x = 0,20'de arka pay
+  19,8°, kalkış payı 0,36 g.
+- ⚠️ Gazebo modeli (hoverbot.sdf) ön ve arka sarhoş tekerlekle elmas düzende;
+  kit testleri tekerlekleri URDF'in ön çiftine taşıyor, çünkü riskli düzen o.
+  Şasi daha yapılmadı (B3); yapılınca robot ve kit tartılıp tablo yeniden
+  hesaplanmalı (`kit_model.margins`).
+- **Plaka arkaya kayarsa pay üçte birine iner.** Kaymaması gereken tek ölçü bu.
 - **Kitin aküsü direğin dibine konmalı.** Akü yukarıda olursa ağırlık merkezi
   yükselir ve tablo değişir.
 - **Kalan risk:** direğin tepesinin bir dala takılması. Bu, 2 m'lik bir kaldıraç
@@ -406,8 +426,54 @@ TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
   ⚠️ **Yolda bulunan:** odom'a çapalı satırlar RTK'da bile pusula hatası
   kadar eğik gidiyordu (16 m'de 0,8–1 m); RTK fixed'da satırlar artık `map`'te
   sürülüyor, sapma p95 0,095 m.
+- ✅ **K2b — devrilme payı** (`kit_model.py` + `test_gazebo_kit.py`, Gazebo
+  aşaması): elle hesap ve fizik tutarlı; eğimde zayıf taraf arka (16,4°), sert
+  kalkışta kitle ön tekerlekler kalkıyor (ayrıntı "Soket — mekanik"). İvme
+  limiti kararı açık.
+- ✅ **K2c — gövdelere göre konum + ağaç denetimi** (`robot_kit/trunk_localizer.py`,
+  `trunk_localizer` düğümü, `test_trunk_stack.py`):
+  - Kameranın her karesindeki gövde yönleri (ve gövde dibi görünüyorsa
+    eğim açısından mesafe) sahadaki `ağaç` noktalarıyla eşleştiriliyor. Önce
+    EKF'in konumu etrafında kaba ve ince bir hipotez araması, sonra birebir
+    eşleştirme, Gauss-Newton ile (x, y, yaw), en son tek tek aykırı eşleşmeler
+    atılıyor. Sonuç `kit/trunk_pose` olarak `ekf_global`'a giriyor (x, y **ve
+    yaw**: pusuladan gelmeyen tek yön bilgisi). EKF ayrıca 5 Mahalanobis'ten
+    uzak bir düzeltmeyi reddediyor.
+  - **Reddedilen kareler:** 4'ten az gövde, büyük artık, ya da **belirsizlik**
+    (bahçe periyodik: iki yer neredeyse aynı skoru alırsa kare kullanılmıyor;
+    yanlış bir düzeltme robotu bir sıra öteye, gövdelerin yanına koyardı).
+  - **Harita yalnız başlangıç tahmini:** eşleşmeyen gövde konumu çekmiyor.
+    `kit/tree_audit` orchadOS için iki şey bildiriyor: haritada olup defalarca
+    görülmesi gerekirken görülmeyen ağaçlar (`missing`, ağaç kodlarıyla) ve
+    haritada olmayan ama birkaç farklı yerden aynı noktada görülen gövdeler
+    (`new`, `map` ve lat/lon). **Harita robotta değişmiyor.**
+  - Sahte dedektör (`trunk_sim.py`): menzil 12 m, robotun gövdesinin
+    kapattığı alt bölge, yakın gövdenin arkasındakini örtmesi, yön/eğim
+    gürültüsü 0,3°, %5 kaçırma, %10 gövde dibi görünmez, ara sıra yanlış tespit.
+  - **Ölçülen** (kinematik sim, 4×3 ağaç, 6 m aralık, kitin F9P'si RTK'sız
+    tek noktada, sahada bir ölü ağaç ve bir yeni dikilmiş ağaç; 3 koşu):
+
+    | | `map` hatası ortalama | p95 |
+    |---|---|---|
+    | Gövdeler kapalı (F9P tek nokta) | 0,75 m | 1,6 m |
+    | **Gövdeler açık** | **0,05 m** | **0,14–0,18 m** |
+
+    Denetim üç koşuda da ölü ağacı (`S1-3`) ve yeni gövdeyi (gerçek yerinden
+    ~0,4–0,8 m) buldu. ⚠️ Aykırı ayıklama eklenmeden önce bir koşuda p95
+    0,45 m'ye çıkmıştı: yeni gövde haritadaki komşusuyla eşleşip çözümü
+    büküyordu.
+  - ⚠️ **Gerçek dedektör yok.** Gerçekte bu tespitleri 360° kameranın canlı
+    görüntüsünde çalışan bir gövde modeli üretecek (orchadOS'un ofis
+    tıklamalarıyla eğitilecek) ve kayıt sürerken canlı görüntünün alınabildiği
+    SDK'da doğrulanmadı. Pi 4'te süre: masaüstünde kare başına ~30 ms;
+    Pi'da ölçülecek (`max_rate_hz` 2).
 
 ## Açık kalanlar
+
+- **Kitli modda ivme limiti (karar bekliyor):** Gazebo'da sert kalkış kitle ön
+  tekerlekleri kaldırdı (yukarıda). Seçenekler: kitli modda köprüde bir ivme
+  rampası (örn. 0,2 g ≈ 2 m/s²), ya da hiç değişiklik yok. Motor komut yolunu
+  değiştirdiği için kullanıcı kararı olmadan yapılmadı.
 
 - **Kayıt sürerken canlı görüntü alınabiliyor mu?** SDK belgesi söylemiyor.
   Kitin kamerasıyla algının tamamı buna bağlı; K3'te denenir.
