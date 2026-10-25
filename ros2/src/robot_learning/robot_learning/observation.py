@@ -14,6 +14,7 @@ the definitions are pinned to the training side by tests:
             odom.v, odom.w  = /odom twist (linear.x, angular.z)
             imu.gz, imu.ax, imu.ay = /imu/data_raw (angular_velocity.z,
                                      linear_acceleration.x, .y)
+            edge.dir = the task: +1 ccw (boundary on the right), -1 cw
     image   /camera/jpeg decoded, RGB, resized to the dataset's image_size
             (export.py, 320x240), CHW float32 in [0, 1] (what LeRobot's
             dataset hands the model; the checkpoint's preprocessor normalizes)
@@ -27,9 +28,11 @@ from typing import Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
-STATE_NAMES = ("imu.ax", "imu.ay")                     # = to_lerobot.DEFAULT_STATE
-LIVE_STATE = ("odom.v", "odom.w", "imu.gz", "imu.ax", "imu.ay")   # what can be built
-LEGACY_STATE = LIVE_STATE        # packs from before hoverbot_conversion.json was packed
+STATE_NAMES = ("imu.ax", "imu.ay", "edge.dir")         # = to_lerobot.DEFAULT_STATE
+# What can be built. edge.dir is the TASK (policy_node's `direction`: +1 ccw,
+# -1 cw), not a sensor — to_lerobot.py takes it from the episode's note.
+LIVE_STATE = ("odom.v", "odom.w", "imu.gz", "imu.ax", "imu.ay", "edge.dir")
+LEGACY_STATE = ("odom.v", "odom.w", "imu.gz", "imu.ax", "imu.ay")   # packs without a summary
 IMAGE_SIZE = (320, 240)                      # (width, height)
 
 

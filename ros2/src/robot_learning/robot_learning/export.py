@@ -147,6 +147,7 @@ def export_episode(directory: str, out_dir: str, number: int, fps: float,
         video = os.path.join("videos", stem + ".mp4")
         write_video(os.path.join(out_dir, video), images, frames.image_index, size, fps)
     return {"index": number, "name": episode["name"], "task": episode["task"],
+            "note": episode.get("note") or "",
             "mode": episode["mode"], "outcome": episode["outcome"],
             "source": episode.get("source"), "frames": int(len(frames.timestamp)),
             "duration_s": round(float(frames.timestamp[-1]), 2), "t0_unix": frames.t0,

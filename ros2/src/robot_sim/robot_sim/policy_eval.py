@@ -37,7 +37,7 @@ from robot_missions_interfaces.srv import PolicyArm
 
 
 def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds: float,
-             offset: float) -> Dict:
+             offset: float, direction: str = "ccw") -> Dict:
     from robot_sim.edge_batch import Stack
     from robot_sim.edge_expert import EdgeExpert, ExpertConfig, edge_metrics
     from robot_sim.lawn_gen import random_lawn
@@ -53,7 +53,7 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
     poses: List = []
     speeds: Dict[str, List[float]] = {"asked": [], "passed": [], "true": []}
     turns: List[float] = []                     # the policy's asked w, beside "asked"
-    outcome: Dict = {"seed": seed, "mode": mode}
+    outcome: Dict = {"seed": seed, "mode": mode, "direction": direction}
     try:
         driver.recorder = None
         driver.wait(lambda: driver.recorder is not None, 90.0, "the stack")
@@ -72,13 +72,15 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
                 Twist, "/cmd_vel_policy", lambda m: speeds["passed"].append(m.linear.x), 10)]
         if mode == "expert":
             stack.spawn(["ros2", "run", "robot_sim", "edge_expert", "--ros-args",
-                         "-p", f"site_file:={site_file}", "-p", f"offset_m:={offset}"])
+                         "-p", f"site_file:={site_file}", "-p", f"offset_m:={offset}",
+                         "-p", f"direction:={direction}"])
             driver.expert = None
             driver.wait(lambda: driver.expert is not None, 30.0, "the expert")
             driver.trigger("/edge_expert/start")
         else:
             node = stack.spawn([python, "-m", "robot_learning.policy_node", "--ros-args",
-                                "-p", f"checkpoint:={checkpoint}"])
+                                "-p", f"checkpoint:={checkpoint}",
+                                "-p", f"direction:={direction}"])
             time.sleep(15.0)                       # torch + checkpoint load
             if node.poll() is not None:
                 # ⚠️ Silent before: a policy_node that died loading left the
@@ -106,7 +108,7 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
         for speed_sub in speed_subs:
             driver.node.destroy_subscription(speed_sub)
         # Lap progress along the edge path, and the metric from the first pose on it.
-        watch = EdgeExpert(lawn, ExpertConfig(offset_m=offset))
+        watch = EdgeExpert(lawn, ExpertConfig(offset_m=offset), direction)
         for x, y in poses[::5]:
             watch.step(x, y, 0.0)
         on = next((i for i, p in enumerate(poses)
@@ -151,6 +153,8 @@ def main(argv=None) -> int:
     parser.add_argument("--seeds", default="20,21,22", help="lawns the policy never saw")
     parser.add_argument("--seconds", type=float, default=150.0)
     parser.add_argument("--offset", type=float, default=0.4)
+    parser.add_argument("--directions", default="ccw",
+                        help="ccw,cw: each lawn both ways (packs with edge.dir in the state)")
     parser.add_argument("--no-expert", action="store_true")
     args = parser.parse_args(argv)
 
@@ -161,12 +165,14 @@ def main(argv=None) -> int:
     results = []
     try:
         for seed in (int(s) for s in args.seeds.split(",")):
-            for mode in (("policy",) if args.no_expert else ("expert", "policy")):
-                print(f"lawn {seed}: {mode}", flush=True)
-                result = run_lawn(driver, seed, mode, args.python,
-                                  os.path.expanduser(args.checkpoint), args.seconds, args.offset)
-                print("  " + json.dumps(result), flush=True)
-                results.append(result)
+            for direction in args.directions.split(","):
+                for mode in (("policy",) if args.no_expert else ("expert", "policy")):
+                    print(f"lawn {seed} {direction}: {mode}", flush=True)
+                    result = run_lawn(driver, seed, mode, args.python,
+                                      os.path.expanduser(args.checkpoint), args.seconds,
+                                      args.offset, direction)
+                    print("  " + json.dumps(result), flush=True)
+                    results.append(result)
     finally:
         driver.close()
         rclpy.try_shutdown()

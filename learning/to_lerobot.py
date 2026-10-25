@@ -27,6 +27,13 @@ Choices, all flags:
             Why not NO state ("" works here): LeRobot 0.6.1's ACT reads
             observation.state's device in forward() even without a state
             feature — KeyError on Kaggle, 2026-10-25.
+            edge.dir: +1 ccw (boundary on the right), -1 cw, from the
+            episode's note (edge_batch writes it). Not a sensor — the TASK:
+            the dataset holds both directions, and facing the edge at a
+            corner or at the start, a frame cannot say which way to turn.
+            Without it the policy dithered left-right at corners (27 sign
+            flips a minute) and set off the wrong way (learning.md 6d-4).
+            ACT ignores the task string, so the direction goes in the state.
   --action  "expert" (the simulator's privileged expert, 6a) or "label" (the
             person / Nav2 — real episodes). Default: expert when present.
 Frames are trimmed at the start until there is a camera frame, a label and
@@ -42,7 +49,8 @@ import sys
 
 import numpy as np
 
-DEFAULT_STATE = ("imu.ax", "imu.ay")
+DEFAULT_STATE = ("imu.ax", "imu.ay", "edge.dir")
+TASK_COLUMNS = ("edge.dir",)          # from the episode's note, not from the bag
 IMAGE_KEY = "observation.images.front"
 
 
@@ -86,6 +94,29 @@ def episode_arrays(dataset_dir: str, item: dict, state_names, state_index, actio
             _fill_forward(act[start:n]).astype(np.float32))
 
 
+def assemble_state(names, sensed, state: np.ndarray, constants: dict) -> np.ndarray:
+    """The columns in `names` order: sensed ones from `state`, task ones constant."""
+    columns = [state[:, sensed.index(n)] if n in sensed
+               else np.full(len(state), constants[n], np.float32) for n in names]
+    return np.stack(columns, axis=1).astype(np.float32) if columns else state
+
+
+def task_values(item: dict, names) -> "list | None":
+    """The task columns' values for one episode; None if its note lacks them."""
+    try:
+        note = json.loads(item.get("note") or "{}")
+    except ValueError:
+        return None
+    out = []
+    for name in names:
+        if name == "edge.dir":
+            direction = note.get("direction")
+            if direction not in ("ccw", "cw"):
+                return None
+            out.append(1.0 if direction == "ccw" else -1.0)
+    return out
+
+
 def convert(dataset_dir: str, out: str, repo_id: str, state_names=DEFAULT_STATE,
             action: str = "auto", use_videos: bool = True) -> dict:
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
@@ -93,10 +124,12 @@ def convert(dataset_dir: str, out: str, repo_id: str, state_names=DEFAULT_STATE,
     with open(os.path.join(dataset_dir, "meta.json"), encoding="utf-8") as handle:
         meta = json.load(handle)
     all_names = meta["state_names"]
-    missing = [n for n in state_names if n not in all_names]
+    sensed = [n for n in state_names if n not in TASK_COLUMNS]
+    tasks = [n for n in state_names if n in TASK_COLUMNS]
+    missing = [n for n in sensed if n not in all_names]
     if missing:
-        raise SystemExit(f"unknown state columns {missing}; have {all_names}")
-    state_index = [all_names.index(n) for n in state_names]
+        raise SystemExit(f"unknown state columns {missing}; have {all_names} + {TASK_COLUMNS}")
+    state_index = [all_names.index(n) for n in sensed]
     if action == "auto":
         action = "expert" if any(e.get("source") == "sim" for e in meta["episodes"]) else "label"
     width, height = meta["image_size"]
@@ -113,11 +146,14 @@ def convert(dataset_dir: str, out: str, repo_id: str, state_names=DEFAULT_STATE,
                                     use_videos=use_videos)
     kept, skipped = [], []
     for item in meta["episodes"]:
-        arrays = episode_arrays(dataset_dir, item, state_names, state_index, action)
+        values = task_values(item, tasks)
+        arrays = (episode_arrays(dataset_dir, item, sensed, state_index, action)
+                  if values is not None else None)
         if arrays is None:
             skipped.append(item["name"])
             continue
         images, state, act = arrays
+        state = assemble_state(state_names, sensed, state, dict(zip(tasks, values)))
         for k in range(len(images)):
             frame = {IMAGE_KEY: images[k], "action": act[k], "task": item["task"]}
             if state_names:

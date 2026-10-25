@@ -38,9 +38,15 @@ class PolicyNode(Node):
         self.declare_parameter("device", "cpu")
         self.declare_parameter("rate_hz", 10.0)
         self.declare_parameter("task", "kenar takibi (uzman)")
+        # The edge direction, for packs trained with edge.dir in the state:
+        # ccw = boundary on the right (edge_expert's default), cw = on the left.
+        self.declare_parameter("direction", "ccw")
         p = self.get_parameter
         self._load(p("checkpoint").value, p("device").value)
-        self._latest = {}
+        direction = p("direction").value
+        if direction not in ("ccw", "cw"):
+            raise ValueError(f"direction is ccw or cw, got {direction!r}")
+        self._latest = {"edge.dir": 1.0 if direction == "ccw" else -1.0}
         self._image = None                   # (stamp msg, jpeg bytes)
         self._armed = False
         self.timings = []

@@ -21,7 +21,8 @@ def test_the_state_columns_are_the_ones_the_policy_was_trained_on():
     spec.loader.exec_module(to_lerobot)
     assert STATE_NAMES == tuple(to_lerobot.DEFAULT_STATE)
     from robot_learning.dataset import STATE_NAMES as EXPORTED
-    assert set(LIVE_STATE) <= set(EXPORTED)
+    assert set(LIVE_STATE) - {"edge.dir"} <= set(EXPORTED), "edge.dir is the task, not a series"
+    assert set(to_lerobot.TASK_COLUMNS) <= set(LIVE_STATE)
 
 
 def test_the_image_size_is_the_exports():
@@ -31,9 +32,9 @@ def test_the_image_size_is_the_exports():
 
 
 def test_state_waits_for_every_column_and_keeps_the_order():
-    assert state_vector({"odom.v": 0.3}, LIVE_STATE) is None
+    assert state_vector({"odom.v": 0.3}, LEGACY_STATE) is None
     latest = {"imu.ay": 5.0, "odom.v": 1.0, "imu.gz": 3.0, "odom.w": 2.0, "imu.ax": 4.0}
-    assert state_vector(latest, LIVE_STATE).tolist() == [1.0, 2.0, 3.0, 4.0, 5.0]
+    assert state_vector(latest, LEGACY_STATE).tolist() == [1.0, 2.0, 3.0, 4.0, 5.0]
 
 
 def test_the_default_state_says_nothing_about_speed():
