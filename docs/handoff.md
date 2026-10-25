@@ -733,7 +733,14 @@ Alanlar hem **masada haritadan çizilecek** hem **öğret-kaydet** ile kaydedile
     - ✅ 6d-1 `policy_gate` (twist_mux 20), ✅ 6d-2 `policy_node` + kapalı
       çevrim (`policy_eval`): görülmemiş sahalarda kenarı takip ediyor,
       dışarı çıkmıyor; hata uzmanın 2–3 katı ve **çok yavaş** (learning.md).
-    - **Sıradaki:** yavaşlığın sebebi; otomatik DAgger; ikinci kamera deneyi
+    - ✅ 6d-3 yavaşlığın sebebi: **copycat** — durumdaki tekerlek hızını
+      kopyalıyordu (hız sıfırlanınca %51 duruyor). Durum artık yalnız ivme
+      (`imu.ax, imu.ay`), sütunlar paketteki özetten okunuyor. Kenar hatası
+      uzman düzeyine indi (2.9–3.9 cm), ama köşelerde sağa-sola titriyor
+      (dk'da 27 yön değişimi) ve bir sahada dışarı yöneldi (kapı durdurdu).
+      Checkpoint `~/.robot/policies/act_edge_18_acc` (Kaggle `hoverbot-edge-train-cam`).
+    - **Sıradaki:** otomatik DAgger (6d-4: titreme + sapma durumlarına uzman
+      etiketi); ikinci kamera deneyi
       (kamera alımına o karar versin); Pi 4'te çıkarım süresi. Donanım
       tarafında B1 (flash) hâlâ darboğaz.
   - Sahada ilk kullanım için `robot.service`'e `site_file:=` eklenmeli

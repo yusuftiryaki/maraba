@@ -27,6 +27,7 @@ import tempfile
 import time
 from typing import Dict, List
 
+from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Odometry
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from shapely.geometry import Point
@@ -50,13 +51,25 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
                    "features": [area_feature("cim", lawn, 41.0, 29.0)]}, handle)
     stack = Stack(workdir, site_file, os.path.join(workdir, "episodes"), seed, "quiet", 10.0)
     poses: List = []
+    speeds: Dict[str, List[float]] = {"asked": [], "passed": [], "true": []}
+    turns: List[float] = []                     # the policy's asked w, beside "asked"
     outcome: Dict = {"seed": seed, "mode": mode}
     try:
         driver.recorder = None
         driver.wait(lambda: driver.recorder is not None, 90.0, "the stack")
         sub = driver.node.create_subscription(
             Odometry, "/ground_truth",
-            lambda m: poses.append((m.pose.pose.position.x, m.pose.pose.position.y)), 50)
+            lambda m: (poses.append((m.pose.pose.position.x, m.pose.pose.position.y)),
+                       speeds["true"].append(m.twist.twist.linear.x)), 50)
+        # Where speed is lost: what the policy ASKED, what the gate PASSED (its
+        # caps and accel limits), what the robot really did.
+        speed_subs = [
+            driver.node.create_subscription(
+                TwistStamped, "/policy/cmd",
+                lambda m: (speeds["asked"].append(m.twist.linear.x),
+                           turns.append(m.twist.angular.z)), 10),
+            driver.node.create_subscription(
+                Twist, "/cmd_vel_policy", lambda m: speeds["passed"].append(m.linear.x), 10)]
         if mode == "expert":
             stack.spawn(["ros2", "run", "robot_sim", "edge_expert", "--ros-args",
                          "-p", f"site_file:={site_file}", "-p", f"offset_m:={offset}"])
@@ -90,6 +103,8 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
                 break
         driver.node.destroy_subscription(sub)
         driver.node.destroy_subscription(gate_sub)
+        for speed_sub in speed_subs:
+            driver.node.destroy_subscription(speed_sub)
         # Lap progress along the edge path, and the metric from the first pose on it.
         watch = EdgeExpert(lawn, ExpertConfig(offset_m=offset))
         for x, y in poses[::5]:
@@ -97,7 +112,20 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
         on = next((i for i, p in enumerate(poses)
                    if watch.path.distance(Point(p)) < 0.2), None)
         outcome.update(lap=round(watch.progress_m / watch.length, 2), poses=len(poses),
-                       gate=(gate[-1] if gate else None))
+                       gate=(gate[-1] if gate else None),
+                       speed={k: _speed_stats(v) for k, v in speeds.items() if v})
+        if turns:
+            # Standing still is two things: turning on the spot (the expert
+            # does it at corners: v 0, w max) or not moving at all.
+            pairs = list(zip(speeds["asked"], turns))
+            outcome["asked_stopped"] = {
+                "turning": round(sum(1 for v, w in pairs if abs(v) < 0.03 and abs(w) >= 0.2)
+                                 / len(pairs), 2),
+                "idle": round(sum(1 for v, w in pairs if abs(v) < 0.03 and abs(w) < 0.2)
+                              / len(pairs), 2),
+                "w_sign_flips_per_min": round(
+                    sum(1 for a, b in zip(turns, turns[1:]) if a * b < 0 and abs(a - b) > 0.4)
+                    / (len(turns) / 600.0), 1)}
         if on is not None and len(poses) - on > 10:
             outcome.update({k: round(v, 3) for k, v in
                             edge_metrics(lawn, offset, poses[on:]).items()})
@@ -106,6 +134,14 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
     finally:
         stack.close()
     return outcome
+
+
+def _speed_stats(values: List[float]) -> Dict:
+    ordered = sorted(values)
+    return {"mean": round(sum(values) / len(values), 3),
+            "p50": round(ordered[len(ordered) // 2], 3),
+            "p90": round(ordered[int(len(ordered) * 0.9)], 3),
+            "stopped": round(sum(1 for v in values if abs(v) < 0.03) / len(values), 2)}
 
 
 def main(argv=None) -> int:

@@ -346,7 +346,8 @@ yayınlar — **damga, komutun hesaplandığı gözleminki**.
 
 ### 6d-2 ✅: `policy_node` + kapalı çevrim değerlendirme (2026-10-24)
 - `robot_learning/observation.py` (ROS'suz): gözlem, eğitimdekinin birebir
-  aynısı — durum sütunları `to_lerobot.DEFAULT_STATE` sırasıyla, kamera
+  aynısı — durum sütunları checkpoint'in yanındaki `hoverbot_conversion.json`
+  sırasıyla (6d-3; yoksa eski beş sütun), kamera
   `camera/jpeg` → RGB, 320×240, CHW, [0, 1]. Testler eğitim tarafının kendi
   tanımlarına bağlı (sessiz uyuşmazlık = yanlış süren politika).
 - `policy_node`: checkpoint'i yükler, 10 Hz (veri setinin fps'i) `select_action`,
@@ -373,7 +374,50 @@ uzmanın 2–3 katı ve **çok yavaş** (150 s'de turun %38–69'u; uzman ~80 s'
 tur) — sebebi incelenmedi (çekingen hız mı, köşede duraksama mı). Çevrimdışı
 MAE (0.011 m/s) bunu göstermiyordu: kapalı çevrimin ayrı ölçülme sebebi bu.
 Çıkarım (dizüstü CPU): ortanca 2 ms, blok hesabı 134–175 ms (her 5 adımda).
-Saha 22: yığın 90 s'de kalkmadı (altyapı), tekrar koşulacak.
+Saha 22 (sonradan): tur %22–27, ort. hata 13–32 cm, dışarı 0.
+
+### 6d-3 ✅: yavaşlığın sebebi — "copycat" (2026-10-25)
+`policy_eval` artık hızı üç yerde döküyor (`speed`): politikanın İSTEDİĞİ
+(`/policy/cmd`), kapının GEÇİRDİĞİ (`/cmd_vel_policy`), robotun GERÇEK hızı;
+ve ileri gitmezken `asked_stopped`: yerinde dönüş mü, boşta mı, dakikada kaç
+kez dönüş yönü değiştirdi.
+- **Saha 22, ilk politika:** uzman ort. 0.28 m/s (%5 duruyor); politika
+  İSTEDİĞİ ort. 0.10 m/s, **zamanın %55'inde ~0** — kapı ve sürüş kısmıyor
+  (geçen 0.11, gerçek 0.10). Çıkarım değil: kapının 0.3 s zaman aşımı hiç
+  dolmadı.
+- **Sebep — kendi hızını kopyalıyor.** Eğitim karelerinin AYNISINDA durumdaki
+  `odom.v/w` sıfırlanınca politika karelerin **%51**'inde duruyor (gerçek
+  durumla %4; `odom.v` 0.3 yapılınca %4). Uzmanın bir sonraki komutu ≈ robotun
+  şimdiki hızı: durumda hız varsa kamera yerine o kestirme öğrenilir
+  (taklit öğrenmede bilinen "copycat" sorunu). Bir kez yavaşlayan yavaş kalır.
+- **Düzeltme:** durum artık yalnız ivmeölçer (`imu.ax, imu.ay` —
+  `to_lerobot.DEFAULT_STATE`): duran ve sabit hızla giden robotta ikisi de ~0,
+  hız bilgisi taşımaz. Tamamen durumsuz olmadı: LeRobot 0.6.1'in ACT'si
+  `forward()`'da durum özelliği yokken de `observation.state` okuyor
+  (Kaggle'da `KeyError`). ⚠️ Sütunlar artık TAHMİN edilmiyor: defter dönüşüm
+  özetini ağırlıkların yanına koyuyor, `policy_node` oradan okuyor; sayı
+  modelinkiyle uyuşmazsa ya da sütunu kuramıyorsa yüklemeyi reddediyor
+  (`observation.checkpoint_state`).
+- **Sonuç** (aynı 18 bölüm, aynı 5 000 adım; 150 s):
+
+| saha | durum | tur | ort. hata | p95 | bantta | dışarı |
+|---|---|---|---|---|---|---|
+| 20 | hız + IMU | %38 | 5.5 cm | 18 cm | – | 0 |
+| 20 | **ivme** | %45 | 3.9 cm | 8.2 cm | %96 | 0 |
+| 21 | hız + IMU | %69 | 7.8 cm | 22 cm | – | 0 |
+| 21 | **ivme** | %1 | – | – | – | kapı kapattı |
+| 22 | hız + IMU | %22–27 | 13–32 cm | 30–80 cm | %30–41 | 0 |
+| 22 | **ivme** | %40–41 | 2.9–3.0 cm | 4.8–5.4 cm | %98–99 | 0 |
+
+  Kenarda **uzman kadar iyi** (uzman 2.5 cm), ama hâlâ yavaş. Saha 22'de
+  ileri gitmediği zamanın dökümü: **%55 yerinde dönüş, %13 boşta**, dakikada
+  **27 kez dönüş yönü değişiyor** — köşede sağa-sola titriyor. Uzman köşede
+  (yön hatası > 30°) yerinde döner (etiketlerin %8'i); politika o sınırda
+  kararsız kalıyor ve ACT'nin 5 adımlık bloğu (0.5 s × 0.8 rad/s ≈ 23°)
+  düzeltmeyi taşırıyor. Saha 21'de başta yanlış yöne gitti, alanın 1 m
+  dışında **kapı kapattı ve durdurdu** — kapının gerçek bir politikaya karşı
+  ilk işi. İkisi de uzmanın hiç görmediği durumlar: 6d-4 (otomatik DAgger)
+  tam onlara etiket toplar.
 
 ## Sonra: politika robota nasıl takılır
 Algoritma seçilince (adaylar: ACT, Diffusion Policy — ikisi de kamera +

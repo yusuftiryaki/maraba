@@ -12,10 +12,21 @@ No ROS here — this runs in Colab/Kaggle. Needs `pip install
 dataset format has changed between releases.
 
 Choices, all flags:
-  --state   which state columns become observation.state. Default: wheel
-            odometry and IMU only. NOT the map/GPS position — that would let
-            the policy memorise one lawn's coordinates instead of looking at
-            the edge (the camera has to do that work).
+  --state   which state columns become observation.state. Default: the
+            accelerometer only (imu.ax, imu.ay) — nothing that says how fast
+            the robot goes. NOT the map/GPS position either way — that would
+            let the policy memorise one lawn's coordinates instead of looking
+            at the edge.
+            ⚠️ The first default was wheel odometry + IMU (odom.v, odom.w,
+            imu.gz, ...). The policy learned to COPY its current speed: on the
+            training frames with odom.v/w zeroed it stopped on 51 % of them
+            (real state: 4 %), and in closed loop it stood still 55 % of the
+            time — once slow, it stayed slow (learning.md, 6d "copycat").
+            The expert's next command is ~ the robot's current speed, so a
+            state with velocities in it is a shortcut around the camera.
+            Why not NO state ("" works here): LeRobot 0.6.1's ACT reads
+            observation.state's device in forward() even without a state
+            feature — KeyError on Kaggle, 2026-10-25.
   --action  "expert" (the simulator's privileged expert, 6a) or "label" (the
             person / Nav2 — real episodes). Default: expert when present.
 Frames are trimmed at the start until there is a camera frame, a label and
@@ -31,7 +42,7 @@ import sys
 
 import numpy as np
 
-DEFAULT_STATE = ("odom.v", "odom.w", "imu.gz", "imu.ax", "imu.ay")
+DEFAULT_STATE = ("imu.ax", "imu.ay")
 IMAGE_KEY = "observation.images.front"
 
 
@@ -90,12 +101,13 @@ def convert(dataset_dir: str, out: str, repo_id: str, state_names=DEFAULT_STATE,
         action = "expert" if any(e.get("source") == "sim" for e in meta["episodes"]) else "label"
     width, height = meta["image_size"]
     features = {
-        "observation.state": {"dtype": "float32", "shape": (len(state_names),),
-                              "names": list(state_names)},
         IMAGE_KEY: {"dtype": "video" if use_videos else "image", "shape": (height, width, 3),
                     "names": ["height", "width", "channel"]},
         "action": {"dtype": "float32", "shape": (2,), "names": list(meta["action_names"])},
     }
+    if state_names:
+        features["observation.state"] = {"dtype": "float32", "shape": (len(state_names),),
+                                         "names": list(state_names)}
     dataset = LeRobotDataset.create(repo_id=repo_id, fps=int(round(meta["fps"])),
                                     features=features, root=out, robot_type="hoverbot",
                                     use_videos=use_videos)
@@ -107,8 +119,10 @@ def convert(dataset_dir: str, out: str, repo_id: str, state_names=DEFAULT_STATE,
             continue
         images, state, act = arrays
         for k in range(len(images)):
-            dataset.add_frame({"observation.state": state[k], IMAGE_KEY: images[k],
-                               "action": act[k], "task": item["task"]})
+            frame = {IMAGE_KEY: images[k], "action": act[k], "task": item["task"]}
+            if state_names:
+                frame["observation.state"] = state[k]
+            dataset.add_frame(frame)
         dataset.save_episode()
         kept.append({"name": item["name"], "frames": len(images)})
         print(f"{item['name']}: {len(images)} frames")
@@ -125,12 +139,14 @@ def main(argv=None) -> int:
     parser.add_argument("dataset", help="episode_export's output directory")
     parser.add_argument("--out", required=True, help="the LeRobot dataset root (must not exist)")
     parser.add_argument("--repo-id", default="local/hoverbot_edge")
-    parser.add_argument("--state", default=",".join(DEFAULT_STATE))
+    parser.add_argument("--state", default=",".join(DEFAULT_STATE),
+                        help='comma-separated columns; "" = camera only (ACT 0.6.1 cannot)')
     parser.add_argument("--action", choices=("auto", "expert", "label"), default="auto")
     parser.add_argument("--images", action="store_true",
                         help="store frames as images instead of video (no encoder needed)")
     args = parser.parse_args(argv)
-    summary = convert(args.dataset, args.out, args.repo_id, tuple(args.state.split(",")),
+    summary = convert(args.dataset, args.out, args.repo_id,
+                      tuple(n for n in args.state.split(",") if n),
                       args.action, use_videos=not args.images)
     print(f"{len(summary['episodes'])} episodes ({summary['action']} actions) -> {args.out}; "
           f"skipped {summary['skipped']}")
