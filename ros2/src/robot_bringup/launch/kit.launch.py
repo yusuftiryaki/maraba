@@ -28,6 +28,7 @@ def generate_launch_description():
     ntrip_file = LaunchConfiguration("ntrip_file")
     camera_shim = LaunchConfiguration("kit_camera_shim")
     site_file = LaunchConfiguration("site_file")
+    camera_time_log = LaunchConfiguration("kit_camera_time_log")
 
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="false"),
@@ -39,6 +40,9 @@ def generate_launch_description():
         # The Camera SDK shim (robot_kit/camera.py). Empty: ~/.robot/sdk/kit_camera_shim
         # if it exists; the fake: "ros2 run robot_kit fake_camera_shim".
         DeclareLaunchArgument("kit_camera_shim", default_value=""),
+        # (robot clock, camera media time) pairs while recording (camera.py)
+        DeclareLaunchArgument("kit_camera_time_log",
+                              default_value=os.path.expanduser("~/.robot/kit_camera_time.csv")),
         # The site's trees (poi "ağaç") for trunk_localizer; empty = no trees.
         DeclareLaunchArgument("site_file", default_value=""),
 
@@ -60,7 +64,8 @@ def generate_launch_description():
         ),
         Node(
             package="robot_kit", executable="kit_camera", name="kit_camera", output="screen",
-            parameters=[{"shim_command": camera_shim, "use_sim_time": use_sim_time}],
+            parameters=[{"shim_command": camera_shim, "time_log": camera_time_log,
+                         "use_sim_time": use_sim_time}],
             respawn=True, respawn_delay=2.0,
         ),
         # The pose from the trunks the 360° camera sees (docs/kit-soketi.md) ->

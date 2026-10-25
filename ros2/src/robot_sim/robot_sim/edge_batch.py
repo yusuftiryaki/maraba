@@ -34,7 +34,13 @@ QUIET_GPS = ["-p", "gps_wander_sigma:=0.0", "-p", "gps_noise_sigma:=0.02"]
 # wide-angle camera looking down at the front (robot.urdf.xacro) — pinhole,
 # 110 deg; a real one would be a fisheye.
 CAMERAS = {"front": [],
-           "edge": ["-p", "camera_frame:=edge_camera_optical_link", "-p", "camera_hfov:=1.92"]}
+           "edge": ["-p", "camera_frame:=edge_camera_optical_link", "-p", "camera_hfov:=1.92"],
+           # 6g: the kit's 360° camera, 2.0 m up on the plate (kit_mount + 1.82),
+           # one stitched 320x160 panorama; trunks drawn trunk-tall. Export with
+           # episode_export --image-size 320x160.
+           "pano": ["-p", "camera_model:=equirect", "-p", "camera_frame:=kit_mount",
+                    "-p", "camera_z_offset:=1.82", "-p", "camera_width:=320",
+                    "-p", "camera_height:=160", "-p", "trunk_height_m:=1.5"]}
 ESP32_LINK = "/tmp/fake_esp32"
 
 

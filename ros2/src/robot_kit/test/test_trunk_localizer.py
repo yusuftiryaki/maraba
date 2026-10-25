@@ -91,7 +91,7 @@ def test_a_prior_a_row_away_is_refused_not_snapped():
 def test_too_few_trunks_is_no_fix():
     loc = TrunkLocalizer(orchard(2), CAMERA)
     verdict = loc.locate((0, 0, 0), [(0.1, 0.2), (1.0, 0.3)])
-    assert verdict.fix is None and "need 4" in verdict.reason
+    assert verdict.fix is None and "need 3" in verdict.reason
 
 
 def test_a_dead_tree_and_a_new_one_do_not_move_the_pose_and_are_reported():

@@ -156,6 +156,14 @@ class SimNode(Node):
         # Pi Camera. 0 hfov = the Pi Camera V2's.
         self.declare_parameter("camera_frame", "camera_optical_link")
         self.declare_parameter("camera_hfov", 0.0)
+        # equirect: camera/image_raw is the kit's 360° camera instead (docs/
+        # learning.md 6g) — a stitched panorama from camera_frame (e.g.
+        # kit_mount, which is always in the URDF) raised by camera_z_offset.
+        self.declare_parameter("camera_model", "pinhole")
+        self.declare_parameter("camera_z_offset", 0.0)
+        # > 0: obstacles under 0.4 m radius are drawn this tall (trunks), not
+        # knee-high (rocks). 0 keeps 6b-6f's world.
+        self.declare_parameter("trunk_height_m", 0.0)
         # Learning mode (docs/learning.md 6b): the lawns' edge on the camera —
         # a site file's areas are grass, the rest soil — and the palette seed
         # (domain randomization; 0 = default colours).
@@ -603,18 +611,28 @@ class SimNode(Node):
         return self._gps_offset
 
     def _publish_camera(self) -> None:
-        from robot_sim.sim_camera import render   # numpy only when the camera is on
-        mount = self._rendered_mount()
-        if mount is None:
-            return
+        from robot_sim.sim_camera import render, render_equirect   # numpy only when on
         p = self.get_parameter
         width, height = int(p("camera_width").value), int(p("camera_height").value)
-        # Heights are guesses: small things knee-high, wide ones tree-trunk tall.
-        solids = [(o.x, o.y, o.radius, 0.4 if o.radius < 0.4 else 1.5)
+        # Heights are guesses: small things knee-high, wide ones tree-trunk tall
+        # — unless trunk_height_m says the small ones are trunks (6g: 6f's tree
+        # was drawn knee-high, a rock a 360° camera on a 2 m mast looks down on).
+        trunk = p("trunk_height_m").value
+        solids = [(o.x, o.y, o.radius, (trunk or 0.4) if o.radius < 0.4 else 1.5)
                   for o in self._obstacles + self._unsurveyed]
         pose = self._world.pose
-        pixels = render(width, height, mount.hfov, mount.translation, mount.rotation,
-                        (pose.x, pose.y, pose.yaw), solids, self._lawns(), self._colours())
+        if p("camera_model").value == "equirect":
+            mount = self._equirect_mount()
+            if mount is None:
+                return
+            pixels = render_equirect(width, height, mount, (pose.x, pose.y, pose.yaw), solids,
+                                     self._lawns(), self._colours())
+        else:
+            mount = self._rendered_mount()
+            if mount is None:
+                return
+            pixels = render(width, height, mount.hfov, mount.translation, mount.rotation,
+                            (pose.x, pose.y, pose.yaw), solids, self._lawns(), self._colours())
         msg = Image()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = p("camera_frame").value
@@ -637,6 +655,19 @@ class SimNode(Node):
             from robot_sim.sim_camera import palette
             self._palette = palette(int(self.get_parameter("ground_seed").value))
         return self._palette
+
+    def _equirect_mount(self):
+        """(x, y, z, yaw) of the 360° camera in base_link, off tf + the offset."""
+        if getattr(self, "_pano_mount", None) is None:
+            try:
+                tf = self._tf_buffer.lookup_transform(
+                    "base_link", self.get_parameter("camera_frame").value, Time())
+            except TransformException:
+                return None
+            t, q = tf.transform.translation, tf.transform.rotation
+            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            self._pano_mount = (t.x, t.y, t.z + self.get_parameter("camera_z_offset").value, yaw)
+        return self._pano_mount
 
     def _rendered_mount(self) -> CameraMount | None:
         frame = self.get_parameter("camera_frame").value

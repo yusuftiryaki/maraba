@@ -34,6 +34,7 @@ GRASS_A = np.array([46, 125, 50], dtype=np.float32)     # RGB
 GRASS_B = np.array([67, 150, 64], dtype=np.float32)
 SKY = np.array([170, 205, 235], dtype=np.float32)
 ROCK = np.array([135, 132, 128], dtype=np.float32)
+BODY = np.array([45, 45, 50], dtype=np.float32)          # the robot's own chassis
 SOIL_A = np.array([118, 92, 62], dtype=np.float32)
 SOIL_B = np.array([134, 108, 76], dtype=np.float32)
 DEFAULT_PALETTE = {"grass_a": GRASS_A, "grass_b": GRASS_B, "soil_a": SOIL_A,
@@ -82,7 +83,18 @@ def render(width: int, height: int, hfov: float, mount_translation: Sequence[flo
     rays = rays @ turn.T                                              # -> world
     tx, ty, tz = mount_translation
     origin = np.array([x + c * tx - s * ty, y + s * tx + c * ty, tz], dtype=np.float32)
+    return shade(rays, origin, obstacles, lawns, colours)
 
+
+def shade(rays: np.ndarray, origin: np.ndarray,
+          obstacles: Sequence[Tuple[float, float, float, float]], lawns: Sequence = (),
+          colours: Optional[Dict[str, np.ndarray]] = None, body=None) -> np.ndarray:
+    """Colour per ray (world frame, H x W x 3 directions) from `origin`.
+    body: (robot x, y, yaw, half-length, half-width, centre offset, height) —
+    rays that meet the robot's own chassis first are painted it (a 360°
+    camera on a mast sees the robot under itself)."""
+    colours = colours or DEFAULT_PALETTE
+    u = rays[..., 0]
     np.seterr(invalid="ignore", over="ignore")    # inf * 0 on sky pixels, masked below
     dx, dy, dz = rays[..., 0], rays[..., 1], rays[..., 2]
     image = np.broadcast_to(SKY, rays.shape).copy()
@@ -132,4 +144,48 @@ def render(width: int, height: int, hfov: float, mount_translation: Sequence[flo
         shade = ROCK * facing[..., None]
         image = np.where(hit[..., None], shade, image)
         depth = np.where(hit, t_hit, depth)
+    if body is not None:
+        # The chassis top, a rectangle at its height: hit where the ray crosses
+        # that plane inside the footprint, before anything else.
+        bx, by, byaw, half_l, half_w, offset, top = body
+        down = dz < -1e-6
+        t_top = np.where(down, (top - origin[2]) / np.where(down, dz, -1.0), np.inf)
+        px = origin[0] + t_top * dx - bx
+        py = origin[1] + t_top * dy - by
+        along = px * math.cos(byaw) + py * math.sin(byaw) - offset
+        across = -px * math.sin(byaw) + py * math.cos(byaw)
+        on = down & (t_top > 0) & (np.abs(along) <= half_l) & (np.abs(across) <= half_w) \
+            & (t_top < depth)
+        image = np.where(on[..., None], BODY, image)
     return image.clip(0, 255).astype(np.uint8)
+
+
+def equirect_rays(width: int, height: int, yaw: float) -> np.ndarray:
+    """World-frame unit rays of an equirectangular panorama: columns are
+    azimuth, +180° (behind, left edge) through 0 (ahead, centre) to -180°;
+    rows are elevation, +90° at the top to -90°. `yaw`: the camera's heading."""
+    az = math.pi - 2.0 * math.pi * (np.arange(width, dtype=np.float32) + 0.5) / width + yaw
+    el = math.pi / 2.0 - math.pi * (np.arange(height, dtype=np.float32) + 0.5) / height
+    a, e = np.meshgrid(az, el)
+    return np.stack([np.cos(e) * np.cos(a), np.cos(e) * np.sin(a), np.sin(e)], axis=-1)
+
+
+def render_equirect(width: int, height: int, mount: Sequence[float],
+                    robot: Tuple[float, float, float],
+                    obstacles: Sequence[Tuple[float, float, float, float]], lawns: Sequence = (),
+                    colours: Optional[Dict[str, np.ndarray]] = None,
+                    body: Tuple[float, float, float, float] = (0.30, 0.20, 0.11, 0.1825)
+                    ) -> np.ndarray:
+    """The kit's 360° camera as one stitched equirectangular image (docs/
+    learning.md 6g). mount: (x, y, z, yaw) in base_link. body: the chassis
+    (half-length, half-width, centre x in base_link, top height) it looks
+    down onto. A real camera gives two fisheyes the SDK stitches; this is the
+    stitched result, without the seam, the exposure or the motion blur."""
+    x, y, yaw = robot
+    mx, my, mz, myaw = mount
+    c, s = math.cos(yaw), math.sin(yaw)
+    origin = np.array([x + c * mx - s * my, y + s * mx + c * my, mz], dtype=np.float32)
+    rays = equirect_rays(width, height, yaw + myaw).astype(np.float32)
+    half_l, half_w, offset, top = body
+    return shade(rays, origin, obstacles, lawns, colours,
+                 body=(x, y, yaw, half_l, half_w, offset, top))

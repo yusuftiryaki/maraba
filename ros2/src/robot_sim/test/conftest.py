@@ -420,6 +420,8 @@ def kit_setup(stack, workdir, ntrip_file="", camera_shim=""):
 def kit_launch_args(stack):
     return ("use_kit:=true", f"kit_fake_dir:={stack.kit_dir}",
             f"kit_gnss_port:={KIT_GNSS_LINK}", f"ntrip_file:={stack.ntrip_file}",
+            # the camera's time pairs in the test's own directory, not ~/.robot
+            f"kit_camera_time_log:={os.path.join(stack.kit_dir, 'camera_time.csv')}",
             # ⚠️ only when set: `name:=` with nothing after it is a launch error
             *((f"kit_camera_shim:={stack.camera_shim}",) if stack.camera_shim else ()))
 

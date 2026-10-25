@@ -47,7 +47,7 @@ class Params:
     gate_range_rel: float = 0.25
     sigma_bearing_deg: float = 0.5
     sigma_depression_deg: float = 0.5
-    min_matches: int = 4
+    min_matches: int = 3          # 3 bearings + their depressions: 6 equations, 3 unknowns
     max_rms_deg: float = 1.0
     outlier_deg: float = 1.5       # a match whose bearing is this far off after the solve is dropped
     ambiguity_ratio: float = 0.85   # second-best / best score, beyond this = ambiguous

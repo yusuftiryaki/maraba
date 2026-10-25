@@ -97,6 +97,7 @@ def generate_launch_description():
     kit_gnss_port = LaunchConfiguration("kit_gnss_port")
     ntrip_file = LaunchConfiguration("ntrip_file")
     kit_camera_shim = LaunchConfiguration("kit_camera_shim")
+    kit_camera_time_log = LaunchConfiguration("kit_camera_time_log")
     web_port = LaunchConfiguration("web_port")
 
     return LaunchDescription([
@@ -210,6 +211,11 @@ def generate_launch_description():
                         "Empty: ~/.robot/sdk/kit_camera_shim if present.",
         ),
         DeclareLaunchArgument(
+            "kit_camera_time_log",
+            default_value=os.path.expanduser("~/.robot/kit_camera_time.csv"),
+            description="Where kit_camera appends (robot clock, camera media time) pairs.",
+        ),
+        DeclareLaunchArgument(
             "ntrip_file", default_value=os.path.expanduser("~/.robot/ntrip.yaml"),
             description="The NTRIP caster (YAML). Missing: the kit runs without RTK.",
         ),
@@ -311,6 +317,7 @@ def generate_launch_description():
             launch_arguments={"use_sim_time": use_sim_time, "kit_fake_dir": kit_fake_dir,
                               "kit_gnss_port": kit_gnss_port,
                               "kit_camera_shim": kit_camera_shim,
+                              "kit_camera_time_log": kit_camera_time_log,
                               "site_file": site_file,
                               "ntrip_file": ntrip_file}.items(),
         ),

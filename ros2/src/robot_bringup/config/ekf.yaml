@@ -133,8 +133,13 @@ ekf_global:
     # without a kit, trees in the site and a detector — then this costs
     # nothing. The yaw is the point as much as the position: it is the one
     # heading this robot has that does not come from the compass.
-    # ⚠️ rejection: a fix more than this many Mahalanobis distances from the
-    # estimate is dropped — the last line against a fix a row over.
+    # ⚠️ NO rejection threshold (pose0_rejection_threshold). With one (5) the
+    # filter LOCKED ITSELF OUT: between fixes the single-point F9P (no
+    # rejection, ~1 m wander) dragged the estimate away while the trunk fixes
+    # kept its covariance tight, so the next good fix was "too far" and
+    # dropped, and the next — MEASURED (test_orchard_stack[trunks]): median
+    # error 0.085 m but p95 1.24 m, corridors 0.6 m off. The guard against a
+    # wrong fix is the localizer's own (ambiguity, residuals, outliers).
     pose0: kit/trunk_pose
     pose0_config: [true,  true,  false,
                    false, false, true,
@@ -144,7 +149,6 @@ ekf_global:
     pose0_queue_size: 5
     pose0_differential: false
     pose0_relative: false
-    pose0_rejection_threshold: 5.0
 
     # ⚠️ imu/data — the MADGWICK-FUSED IMU, with a real orientation in it,
     # because ABSOLUTE YAW IS ON HERE (index 5). This is the whole point of the
