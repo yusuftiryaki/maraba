@@ -529,6 +529,38 @@ değil), geri kalan her şey aynı.
   girişli politika) ayrı bir altyapı işi — kayıt/dışa aktarma/dönüştürme/
   `policy_node` tek kamera varsayıyor.
 
+### 6f ✅: ikinci beceri — ağacın etrafından dolaşma (sim, 2026-10-25)
+Kenar altyapısı olduğu gibi: uzman (`EdgeExpert`, `path=orbit_path(...)` —
+gövdenin yüzeyinden `offset` dışarıda bir çember; ccw = ağaç SOLDA, kenardaki
+"çim solda" ile aynı yön anlamı, `edge.dir` aynen), `lawn_gen.random_tree`
+(rastgele sahaya bir gövde; uzman iki yönde de temiz dönebiliyorsa kabul),
+`orbit_metrics` (gövde yüzeyine uzaklığın hatası, `too_close`, `reached`),
+`edge_batch`/`policy_eval --task tree` (değerlendirme artık çarpışmaları da
+sayıyor, `/collision_truth`).
+- ⚠️ İlk denemede uzman gövdeye dayanıp kaldı: sim'in robotu 0.4 m'lik bir
+  disk (`world.robot_radius`), ofset 0.45 yetmiyordu → **0.55**; üretici
+  artık yaklaşma yolunda da gövdeye değmemeyi şart koşuyor.
+- 18 uzman bölümü (sahalar 1–9 × 2 yön, hepsi başarılı, tur ~20 s), 5 000
+  adım ACT, görülmemiş sahalar 20–22, 90 s:
+
+| | uzman | politika |
+|---|---|---|
+| tur | %98–100 | **~0** (ccw %4–6, cw ters yöne) |
+| ort. hata | 1.6–2.9 cm | 15 cm (ccw: gövdeye dayalı) / 64–82 cm (cw) |
+| çarpışma | 0 | ccw **5–10**, cw 0 |
+| sonu | — | ccw: **jam_monitor "stall" → kapı kapandı**; cw: uzaklaştı |
+
+- **Sonuç: bu kamerayla öğrenilemiyor.** Robot dönerken ağaç YANDA kalıyor;
+  62°'lik ön kamera onu yalnız yaklaşırken görüyor, turun kendisinde hiç.
+  Politika kenar gibi "görerek düzeltemiyor": ccw'de gövdeye sürdü, cw'de
+  uzaklaştı. Güvenlik zinciri çalıştı: gövdeye dayanınca sıkışma tespiti
+  kapıyı kapattı (6d-1 + #34), robot durdu.
+- **Ne gerekir (öneri, yapılmadı):** ağacı dönüş boyunca gören bir algı —
+  yana bakan kamera ya da 360° (ikinci kamera sorusu burada yeniden açılır,
+  6e'deki aşağı bakan aday da yanı görmüyor); ya da ağaç dönüşünü öğrenmeyle
+  değil klasik yolla yapmak (haritadaki ağacın çevresine Nav2 yolu; NEO-6M'in
+  2–5 m hatası buna yetmez, RTK ya da yakın mesafe sensörü ister).
+
 ## Sonra: politika robota nasıl takılır
 Algoritma seçilince (adaylar: ACT, Diffusion Policy — ikisi de kamera +
 durum → aksiyon dizisi) öğrenilen politika twist_mux'a teleop ile Nav2

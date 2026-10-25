@@ -96,3 +96,26 @@ def test_a_target_behind_is_always_turned_the_same_way(direction, sign):
     for off in (-0.05, 0.05):
         v, w = expert.label(x, y, ahead + math.pi + off)
         assert v == 0.0 and math.copysign(1.0, w) == sign
+
+
+@pytest.mark.parametrize("direction, sign", [("ccw", 1.0), ("cw", -1.0)])
+def test_the_orbit_keeps_the_tree_on_the_directions_side(direction, sign):
+    """ccw: the tree on the LEFT, as the lawn is for an edge (learning.md 6f)."""
+    from robot_sim.edge_expert import orbit_path
+    path = orbit_path((1.0, 2.0), 0.2, 0.45, direction)
+    assert path.is_ring and abs(path.length - 2 * math.pi * 0.65) < 0.01
+    (x0, y0), (x1, y1) = path.coords[0], path.coords[1]
+    # Cross product of the heading with the way to the centre: + = on the left.
+    cross = (x1 - x0) * (2.0 - y0) - (y1 - y0) * (1.0 - x0)
+    assert math.copysign(1.0, cross) == sign
+
+
+def test_orbit_metrics_on_a_perfect_circle_and_on_a_scrape():
+    from robot_sim.edge_expert import orbit_metrics
+    ring = [(0.75 * math.cos(a / 50 * 2 * math.pi), 0.75 * math.sin(a / 50 * 2 * math.pi))
+            for a in range(51)]
+    m = orbit_metrics((0.0, 0.0), 0.2, 0.55, ring)
+    assert m["error_max"] < 0.01 and m["reached"] == 1.0 and m["too_close"] == 0.0
+    scrape = [(0.3 * math.cos(a / 50 * math.pi), 0.3 * math.sin(a / 50 * math.pi))
+              for a in range(51)]
+    assert orbit_metrics((0.0, 0.0), 0.2, 0.55, scrape)["too_close"] == 1.0

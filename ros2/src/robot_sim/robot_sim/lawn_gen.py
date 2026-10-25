@@ -18,7 +18,8 @@ import numpy as np
 from shapely import affinity
 from shapely.geometry import Point, Polygon
 
-from robot_sim.edge_expert import EdgeExpert, ExpertConfig, drive_unicycle, edge_metrics
+from robot_sim.edge_expert import (EdgeExpert, ExpertConfig, drive_unicycle, edge_metrics,
+                                   orbit_metrics, orbit_path)
 
 
 @dataclass(frozen=True)
@@ -92,3 +93,62 @@ def random_lawn(seed: int, spec: LawnSpec = LawnSpec(), attempts: int = 500) -> 
             continue
         return polygon
     raise RuntimeError(f"no usable lawn in {attempts} attempts (seed {seed})")
+
+
+ROBOT_RADIUS = 0.4                    # sim_node / world.py robot_radius
+
+
+@dataclass(frozen=True)
+class TreeSpec:
+    """A tree on a lawn (docs/learning.md 6f): a trunk the robot circles."""
+    # base_link from the trunk's SURFACE. ⚠️ sim_node's robot is a 0.4 m disc
+    # (world.robot_radius, = Nav2's): 0.45 had it pressed against the trunk.
+    offset_m: float = 0.55
+    trunk_m: tuple = (0.08, 0.25)     # trunk radius
+    distance_m: tuple = (1.8, 3.2)    # from the robot's start to the trunk centre
+    clearance_m: float = 0.5          # the orbit stays this far inside the lawn's edge
+
+
+def check_tree(lawn: Polygon, center, radius: float, spec: TreeSpec,
+               direction: str = "ccw") -> Dict[str, float]:
+    """Raises ValueError when the tree is unusable; else the expert's metrics."""
+    orbit = Point(center).buffer(radius + spec.offset_m)
+    if not lawn.buffer(-spec.clearance_m).contains(orbit):
+        raise ValueError("the orbit leaves the lawn")
+    if orbit.buffer(0.3).contains(Point(0, 0)):
+        raise ValueError("the robot would start on the orbit")
+    path = orbit_path(center, radius, spec.offset_m, direction)
+    expert = EdgeExpert(None, ExpertConfig(offset_m=spec.offset_m), direction, path=path)
+    poses = drive_unicycle(expert, (0.0, 0.0, 0.0), max_s=200.0)
+    if not expert.done:
+        raise ValueError("the expert did not finish the orbit")
+    on = next(i for i, (x, y, _) in enumerate(poses)
+              if expert.path.distance(Point(x, y)) < 0.2)
+    metrics = orbit_metrics(center, radius, spec.offset_m, [(x, y) for x, y, _ in poses[on:]])
+    # The WHOLE drive, the way in too: the robot (a ROBOT_RADIUS disc) must
+    # never touch the trunk.
+    nearest = min(math.hypot(x - center[0], y - center[1]) for x, y, _ in poses) - radius
+    if nearest < ROBOT_RADIUS + 0.05:
+        raise ValueError(f"the expert came within {nearest:.2f} m of the trunk")
+    if metrics["error_p95"] > 0.15:
+        raise ValueError(f"the expert drove it badly: {metrics}")
+    return metrics
+
+
+def random_tree(seed: int, spec: TreeSpec = TreeSpec(), attempts: int = 500):
+    """(lawn, (cx, cy), trunk radius): a random lawn (random_lawn(seed)) with
+    one tree the expert circles cleanly both ways from the start."""
+    lawn = random_lawn(seed)
+    rng = np.random.default_rng(seed + 100_000)
+    for _ in range(attempts):
+        a = float(rng.uniform(0, 2 * math.pi))
+        d = float(rng.uniform(*spec.distance_m))
+        center = (d * math.cos(a), d * math.sin(a))
+        radius = float(rng.uniform(*spec.trunk_m))
+        try:
+            check_tree(lawn, center, radius, spec, "ccw")
+            check_tree(lawn, center, radius, spec, "cw")
+        except ValueError:
+            continue
+        return lawn, center, radius
+    raise RuntimeError(f"no usable tree in {attempts} attempts (seed {seed})")

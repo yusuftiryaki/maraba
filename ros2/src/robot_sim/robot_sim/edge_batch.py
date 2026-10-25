@@ -38,11 +38,32 @@ CAMERAS = {"front": [],
 ESP32_LINK = "/tmp/fake_esp32"
 
 
+TASKS = {"edge": "kenar takibi (uzman)", "tree": "ağaç etrafı (uzman)"}
+
+
+def scene(seed: int, task: str, offset: float) -> Dict:
+    """The world for one seed: the lawn, and for "tree" a trunk on it to
+    circle (lawn_gen.random_tree; docs/learning.md 6f). sim: extra sim_node
+    arguments; expert: extra edge_expert ones; note: what goes in the
+    episode's note."""
+    from robot_sim.lawn_gen import TreeSpec, random_lawn, random_tree
+    if task == "edge":
+        return {"lawn": random_lawn(seed), "sim": [], "expert": [], "note": {},
+                "offset": offset, "tree": None}
+    lawn, (cx, cy), radius = random_tree(seed)
+    tree_offset = TreeSpec().offset_m
+    return {"lawn": lawn, "offset": tree_offset, "tree": ((cx, cy), radius),
+            "sim": ["-p", f"unsurveyed_obstacle_centers:=[{cx}, {cy}]",
+                    "-p", f"unsurveyed_obstacle_radii:=[{radius}]"],
+            "expert": ["-p", f"orbit_center:=[{cx}, {cy}]", "-p", f"orbit_radius:={radius}"],
+            "note": {"tree": [round(cx, 3), round(cy, 3), round(radius, 3)]}}
+
+
 class Stack:
     """sim_node + robot.launch.py (+ the expert), killed as one."""
 
     def __init__(self, workdir: str, site_file: str, episodes_dir: str, seed: int,
-                 gps: str, camera_hz: float, camera: str = "front"):
+                 gps: str, camera_hz: float, camera: str = "front", extra_sim=()):
         self.procs: List[subprocess.Popen] = []
         self.workdir = workdir
         self.site_file = site_file
@@ -51,7 +72,7 @@ class Stack:
                "-p", f"ground_seed:={seed}", "-p", f"camera_rate_hz:={camera_hz}"]
         if gps == "quiet":
             sim += QUIET_GPS
-        sim += CAMERAS[camera]
+        sim += CAMERAS[camera] + list(extra_sim)
         self.spawn(sim)
         time.sleep(3.0)
         self.spawn(["ros2", "launch", "robot_bringup", "robot.launch.py",
@@ -150,16 +171,16 @@ class Driver:
 
 def run_lawn(driver: Driver, seed: int, out: str, gps: str, directions: List[str],
              camera_hz: float, offset: float, lap_timeout: float,
-             camera: str = "front") -> List[str]:
-    from robot_sim.lawn_gen import random_lawn
+             camera: str = "front", task: str = "edge") -> List[str]:
     from robot_sim.site_world import area_feature
-    lawn = random_lawn(seed)
+    world = scene(seed, task, offset)
+    lawn, offset = world["lawn"], world["offset"]
     workdir = tempfile.mkdtemp(prefix=f"edge_batch_{seed}_")
     site_file = os.path.join(workdir, "site.geojson")
     with open(site_file, "w", encoding="utf-8") as handle:
         json.dump({"type": "FeatureCollection",
                    "features": [area_feature("cim", lawn, 41.0, 29.0)]}, handle)
-    stack = Stack(workdir, site_file, out, seed, gps, camera_hz, camera)
+    stack = Stack(workdir, site_file, out, seed, gps, camera_hz, camera, world["sim"])
     names = []
     try:
         driver.recorder = driver.expert = None
@@ -167,13 +188,13 @@ def run_lawn(driver: Driver, seed: int, out: str, gps: str, directions: List[str
         for direction in directions:
             expert = stack.spawn(["ros2", "run", "robot_sim", "edge_expert", "--ros-args",
                                   "-p", f"site_file:={site_file}", "-p", f"offset_m:={offset}",
-                                  "-p", f"direction:={direction}"])
+                                  "-p", f"direction:={direction}", *world["expert"]])
             driver.expert = None
             driver.wait(lambda: driver.expert is not None, 30.0, "the expert")
             note = {"seed": seed, "direction": direction, "gps": gps, "offset_m": offset,
-                    "camera": camera,
+                    "camera": camera, "task": task, **world["note"],
                     "lawn_wkt": lawn.wkt, "expert": "robot_sim edge_expert (privileged)"}
-            name = driver.episode("start", {"task": "kenar takibi (uzman)", "mode": "demo",
+            name = driver.episode("start", {"task": TASKS[task], "mode": "demo",
                                             "note": json.dumps(note)})
             outcome = "success"
             try:
@@ -203,6 +224,8 @@ def main(argv=None) -> int:
     parser.add_argument("--directions", default="ccw,cw")
     parser.add_argument("--camera-hz", type=float, default=10.0)
     parser.add_argument("--camera", choices=sorted(CAMERAS), default="front")
+    parser.add_argument("--task", choices=sorted(TASKS), default="edge",
+                        help="edge: follow the lawn's edge; tree: circle a tree on it")
     parser.add_argument("--offset", type=float, default=0.4)
     parser.add_argument("--lap-timeout", type=float, default=300.0)
     args = parser.parse_args(argv)
@@ -216,7 +239,8 @@ def main(argv=None) -> int:
             seed = args.seed + i
             print(f"lawn {i + 1}/{args.lawns} (seed {seed})")
             made += run_lawn(driver, seed, args.out, args.gps, args.directions.split(","),
-                             args.camera_hz, args.offset, args.lap_timeout, args.camera)
+                             args.camera_hz, args.offset, args.lap_timeout, args.camera,
+                             args.task)
     finally:
         driver.close()
         rclpy.try_shutdown()

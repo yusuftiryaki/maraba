@@ -31,30 +31,32 @@ from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Odometry
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from shapely.geometry import Point
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 
 from robot_missions_interfaces.srv import PolicyArm
 
 
 def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds: float,
-             offset: float, direction: str = "ccw", camera: str = "front") -> Dict:
-    from robot_sim.edge_batch import Stack
-    from robot_sim.edge_expert import EdgeExpert, ExpertConfig, edge_metrics
-    from robot_sim.lawn_gen import random_lawn
+             offset: float, direction: str = "ccw", camera: str = "front",
+             task: str = "edge") -> Dict:
+    from robot_sim.edge_batch import Stack, scene
+    from robot_sim.edge_expert import (EdgeExpert, ExpertConfig, edge_metrics, orbit_metrics,
+                                       orbit_path)
     from robot_sim.site_world import area_feature
 
-    lawn = random_lawn(seed)
+    world = scene(seed, task, offset)
+    lawn, offset, tree = world["lawn"], world["offset"], world["tree"]
     workdir = tempfile.mkdtemp(prefix=f"policy_eval_{seed}_{mode}_")
     site_file = os.path.join(workdir, "site.geojson")
     with open(site_file, "w", encoding="utf-8") as handle:
         json.dump({"type": "FeatureCollection",
                    "features": [area_feature("cim", lawn, 41.0, 29.0)]}, handle)
     stack = Stack(workdir, site_file, os.path.join(workdir, "episodes"), seed, "quiet", 10.0,
-                  camera)
+                  camera, world["sim"])
     poses: List = []
     speeds: Dict[str, List[float]] = {"asked": [], "passed": [], "true": []}
     turns: List[float] = []                     # the policy's asked w, beside "asked"
-    outcome: Dict = {"seed": seed, "mode": mode, "direction": direction}
+    outcome: Dict = {"seed": seed, "mode": mode, "direction": direction, "task": task}
     try:
         driver.recorder = None
         driver.wait(lambda: driver.recorder is not None, 90.0, "the stack")
@@ -64,7 +66,13 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
                        speeds["true"].append(m.twist.twist.linear.x)), 50)
         # Where speed is lost: what the policy ASKED, what the gate PASSED (its
         # caps and accel limits), what the robot really did.
+        hits = {"now": False, "count": 0}
+
+        def on_collision(m):
+            hits["count"] += bool(m.data and not hits["now"])     # rising edges
+            hits["now"] = bool(m.data)
         speed_subs = [
+            driver.node.create_subscription(Bool, "/collision_truth", on_collision, 10),
             driver.node.create_subscription(
                 TwistStamped, "/policy/cmd",
                 lambda m: (speeds["asked"].append(m.twist.linear.x),
@@ -74,14 +82,14 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
         if mode == "expert":
             stack.spawn(["ros2", "run", "robot_sim", "edge_expert", "--ros-args",
                          "-p", f"site_file:={site_file}", "-p", f"offset_m:={offset}",
-                         "-p", f"direction:={direction}"])
+                         "-p", f"direction:={direction}", *world["expert"]])
             driver.expert = None
             driver.wait(lambda: driver.expert is not None, 30.0, "the expert")
             driver.trigger("/edge_expert/start")
         else:
             node = stack.spawn([python, "-m", "robot_learning.policy_node", "--ros-args",
                                 "-p", f"checkpoint:={checkpoint}",
-                                "-p", f"direction:={direction}"])
+                                "-p", f"direction:={direction}", *world["expert"]])
             time.sleep(15.0)                       # torch + checkpoint load
             if node.poll() is not None:
                 # ⚠️ Silent before: a policy_node that died loading left the
@@ -109,13 +117,14 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
         for speed_sub in speed_subs:
             driver.node.destroy_subscription(speed_sub)
         # Lap progress along the edge path, and the metric from the first pose on it.
-        watch = EdgeExpert(lawn, ExpertConfig(offset_m=offset), direction)
+        path = orbit_path(tree[0], tree[1], offset, direction) if tree else None
+        watch = EdgeExpert(lawn, ExpertConfig(offset_m=offset), direction, path=path)
         for x, y in poses[::5]:
             watch.step(x, y, 0.0)
         on = next((i for i, p in enumerate(poses)
                    if watch.path.distance(Point(p)) < 0.2), None)
         outcome.update(lap=round(watch.progress_m / watch.length, 2), poses=len(poses),
-                       gate=(gate[-1] if gate else None),
+                       gate=(gate[-1] if gate else None), collisions=hits["count"],
                        speed={k: _speed_stats(v) for k, v in speeds.items() if v})
         if turns:
             # Standing still is two things: turning on the spot (the expert
@@ -130,8 +139,9 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
                     sum(1 for a, b in zip(turns, turns[1:]) if a * b < 0 and abs(a - b) > 0.4)
                     / (len(turns) / 600.0), 1)}
         if on is not None and len(poses) - on > 10:
-            outcome.update({k: round(v, 3) for k, v in
-                            edge_metrics(lawn, offset, poses[on:]).items()})
+            metrics = (orbit_metrics(tree[0], tree[1], offset, poses[on:]) if tree
+                       else edge_metrics(lawn, offset, poses[on:]))
+            outcome.update({k: round(v, 3) for k, v in metrics.items()})
         else:
             outcome["note"] = "never reached the edge"
     finally:
@@ -158,6 +168,7 @@ def main(argv=None) -> int:
                         help="ccw,cw: each lawn both ways (packs with edge.dir in the state)")
     parser.add_argument("--camera", choices=("front", "edge"), default="front",
                         help="the camera the policy was trained on (edge_batch --camera)")
+    parser.add_argument("--task", choices=("edge", "tree"), default="edge")
     parser.add_argument("--no-expert", action="store_true")
     args = parser.parse_args(argv)
 
@@ -173,7 +184,7 @@ def main(argv=None) -> int:
                     print(f"lawn {seed} {direction}: {mode}", flush=True)
                     result = run_lawn(driver, seed, mode, args.python,
                                       os.path.expanduser(args.checkpoint), args.seconds,
-                                      args.offset, direction, args.camera)
+                                      args.offset, direction, args.camera, args.task)
                     print("  " + json.dumps(result), flush=True)
                     results.append(result)
     finally:

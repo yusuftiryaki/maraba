@@ -53,3 +53,15 @@ def test_site_world_round_trips_and_writes_a_site_area(tmp_path):
                                 "features": [area_feature("cim", lawn, 41.0, 29.0)]}))
     (back,) = areas_in_world(str(site), 41.0, 29.0)
     assert back.symmetric_difference(lawn).area < 1e-6
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_every_tree_sits_inside_its_lawn_and_the_expert_circles_it_both_ways(seed):
+    from robot_sim.lawn_gen import TreeSpec, check_tree, random_tree
+    spec = TreeSpec()
+    lawn, center, radius = random_tree(seed, spec)
+    assert lawn.equals(random_lawn(seed)), "the same lawn as the edge task's"
+    assert lawn.buffer(-spec.clearance_m).contains(Point(center).buffer(radius + spec.offset_m))
+    for direction in ("ccw", "cw"):
+        metrics = check_tree(lawn, center, radius, spec, direction)
+        assert metrics["error_mean"] < 0.06 and metrics["too_close"] == 0.0
