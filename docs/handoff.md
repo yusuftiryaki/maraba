@@ -755,6 +755,10 @@ Alanlar hem **masada haritadan çizilecek** hem **öğret-kaydet** ile kaydedile
       aynı veri/adım): belirgin kazanç yok (saha 21'i DAgger'sız çözdü, 20'de
       kötü, hata daha iyi değil). **Öneri: şimdi alma**, gerçek bölümlerden
       sonra yeniden bak. DAgger 3. tur toplandı, eğitilmedi (gerek yok).
+    - ✅ 6f ağacın etrafından dolaşma (sim, `--task tree`): uzman temiz,
+      politika **öğrenemedi** — dönüşte ağaç ön kameranın dışında. ccw'de
+      gövdeye sürdü (sıkışma → kapı durdurdu), cw'de uzaklaştı. Yana bakan /
+      360° algı ya da klasik yol gerekir (learning.md 6f).
     - **Sıradaki:** Pi 4'te çıkarım süresi (donanım gelince). Donanım
       tarafında B1 (flash) hâlâ darboğaz.
   - ✅ `robot.service` artık repoda (`deploy/robot.service`, `site_file:=`

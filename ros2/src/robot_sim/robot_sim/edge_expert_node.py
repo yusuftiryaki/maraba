@@ -29,7 +29,7 @@ from shapely.geometry import Polygon
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
-from robot_sim.edge_expert import EdgeExpert, ExpertConfig
+from robot_sim.edge_expert import EdgeExpert, ExpertConfig, orbit_path
 from robot_sim.site_world import areas_in_world
 
 
@@ -52,6 +52,10 @@ class EdgeExpertNode(Node):
         self.declare_parameter("direction", "ccw")
         self.declare_parameter("laps", 1.0)
         self.declare_parameter("drive", True)
+        # A tree to circle instead of the lawn's edge (learning.md 6f): the
+        # trunk's centre in sim_world and its radius; 0 = follow the edge.
+        self.declare_parameter("orbit_center", [0.0, 0.0])
+        self.declare_parameter("orbit_radius", 0.0)
         p = self.get_parameter
         self.lawn = lawn_in_sim_world(p("site_file").value, p("area").value,
                                       p("datum_lat").value, p("datum_lon").value)
@@ -77,8 +81,13 @@ class EdgeExpertNode(Node):
                      math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
 
     def _on_start(self, request, response):
-        self.expert = EdgeExpert(self.lawn, self.config, self.get_parameter("direction").value,
-                                 self.get_parameter("laps").value)
+        p = self.get_parameter
+        direction = p("direction").value
+        path = None
+        if p("orbit_radius").value > 0.0:
+            cx, cy = p("orbit_center").value
+            path = orbit_path((cx, cy), p("orbit_radius").value, self.config.offset_m, direction)
+        self.expert = EdgeExpert(self.lawn, self.config, direction, p("laps").value, path=path)
         self.state = "running"
         response.success, response.message = True, f"edge lap of {self.expert.length:.1f} m"
         self._publish_status()

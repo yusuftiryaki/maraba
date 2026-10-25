@@ -47,6 +47,21 @@ def edge_path(boundary: Polygon, offset_m: float, direction: str = "ccw") -> Lin
     return LineString(inner.exterior.coords)
 
 
+def orbit_path(center: XY, radius_m: float, offset_m: float, direction: str = "ccw",
+               segments: int = 72) -> LineString:
+    """The circle base_link follows round a tree (docs/learning.md 6f): the
+    trunk's surface pushed `offset_m` OUT. ccw: the tree on the left — the
+    same orientation sense as an edge (ccw: the lawn on the left)."""
+    if direction not in ("ccw", "cw"):
+        raise ValueError(f"direction is ccw or cw, got {direction!r}")
+    r = radius_m + offset_m
+    sign = 1.0 if direction == "ccw" else -1.0
+    coords = [(center[0] + r * math.cos(sign * 2 * math.pi * i / segments),
+               center[1] + r * math.sin(sign * 2 * math.pi * i / segments))
+              for i in range(segments)]
+    return LineString(coords + coords[:1])         # closed exactly: a ring
+
+
 @dataclass
 class ExpertConfig:
     offset_m: float = 0.4
@@ -62,10 +77,12 @@ class ExpertConfig:
 class EdgeExpert:
     """Pure pursuit on edge_path(); counts the lap by arc length."""
 
-    def __init__(self, boundary: Polygon, config: ExpertConfig = ExpertConfig(),
-                 direction: str = "ccw", laps: float = 1.0):
+    def __init__(self, boundary: Optional[Polygon], config: ExpertConfig = ExpertConfig(),
+                 direction: str = "ccw", laps: float = 1.0, path: Optional[LineString] = None):
+        """boundary: the lawn (follow its edge, offset in); or path: any closed
+        line to follow, oriented (orbit_path: round a tree)."""
         self.config = config
-        self.path = edge_path(boundary, config.offset_m, direction)
+        self.path = path if path is not None else edge_path(boundary, config.offset_m, direction)
         self.inward = 1.0 if direction == "ccw" else -1.0   # ccw: the lawn is on the left
         self.length = self.path.length
         self.laps = laps
@@ -167,6 +184,29 @@ def edge_metrics(boundary: Polygon, offset_m: float, poses: Sequence[XY],
     return {"error_mean": float(err.mean()), "error_p95": float(np.percentile(err, 95)),
             "error_max": float(err.max()), "within": float(np.mean(err <= tolerance_m)),
             "outside": float(np.mean(d < 0)), "reached": float(reached),
+            "poses": len(poses)}
+
+
+def orbit_metrics(center: XY, radius_m: float, offset_m: float, poses: Sequence[XY],
+                  tolerance_m: float = 0.1, close_m: float = 0.45,
+                  reach_step_m: float = 0.1) -> Dict[str, float]:
+    """edge_metrics for a tree: the error is |distance to the trunk's surface
+    - offset|; `too_close` the share of poses nearer the surface than close_m
+    (sim_node's robot is a 0.4 m disc: touching, or nearly); `reached` the share of
+    the trunk's circumference within offset + tolerance of the drive."""
+    if len(poses) < 2:
+        raise ValueError("need a drive, not a point")
+    p = np.asarray(poses, dtype=float)
+    surface = np.hypot(p[:, 0] - center[0], p[:, 1] - center[1]) - radius_m
+    err = np.abs(surface - offset_m)
+    track = LineString(poses)
+    trunk = Point(center).buffer(radius_m, 64).exterior
+    n = max(8, int(trunk.length / reach_step_m))
+    samples = [trunk.interpolate(i / n, normalized=True) for i in range(n)]
+    reached = np.mean([track.distance(q) <= offset_m + tolerance_m for q in samples])
+    return {"error_mean": float(err.mean()), "error_p95": float(np.percentile(err, 95)),
+            "error_max": float(err.max()), "within": float(np.mean(err <= tolerance_m)),
+            "too_close": float(np.mean(surface < close_m)), "reached": float(reached),
             "poses": len(poses)}
 
 
