@@ -430,6 +430,43 @@ TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
   aşaması): elle hesap ve fizik tutarlı; eğimde zayıf taraf arka (16,4°), sert
   kalkışta kitle ön tekerlekler kalkıyor (ayrıntı "Soket — mekanik"). İvme
   limiti kararı açık.
+- ✅ **K2c — gövdelere göre konum + ağaç denetimi** (`robot_kit/trunk_localizer.py`,
+  `trunk_localizer` düğümü, `test_trunk_stack.py`):
+  - Kameranın her karesindeki gövde yönleri (ve gövde dibi görünüyorsa
+    eğim açısından mesafe) sahadaki `ağaç` noktalarıyla eşleştiriliyor. Önce
+    EKF'in konumu etrafında kaba ve ince bir hipotez araması, sonra birebir
+    eşleştirme, Gauss-Newton ile (x, y, yaw), en son tek tek aykırı eşleşmeler
+    atılıyor. Sonuç `kit/trunk_pose` olarak `ekf_global`'a giriyor (x, y **ve
+    yaw**: pusuladan gelmeyen tek yön bilgisi). EKF ayrıca 5 Mahalanobis'ten
+    uzak bir düzeltmeyi reddediyor.
+  - **Reddedilen kareler:** 4'ten az gövde, büyük artık, ya da **belirsizlik**
+    (bahçe periyodik: iki yer neredeyse aynı skoru alırsa kare kullanılmıyor;
+    yanlış bir düzeltme robotu bir sıra öteye, gövdelerin yanına koyardı).
+  - **Harita yalnız başlangıç tahmini:** eşleşmeyen gövde konumu çekmiyor.
+    `kit/tree_audit` orchadOS için iki şey bildiriyor: haritada olup defalarca
+    görülmesi gerekirken görülmeyen ağaçlar (`missing`, ağaç kodlarıyla) ve
+    haritada olmayan ama birkaç farklı yerden aynı noktada görülen gövdeler
+    (`new`, `map` ve lat/lon). **Harita robotta değişmiyor.**
+  - Sahte dedektör (`trunk_sim.py`): menzil 12 m, robotun gövdesinin
+    kapattığı alt bölge, yakın gövdenin arkasındakini örtmesi, yön/eğim
+    gürültüsü 0,3°, %5 kaçırma, %10 gövde dibi görünmez, ara sıra yanlış tespit.
+  - **Ölçülen** (kinematik sim, 4×3 ağaç, 6 m aralık, kitin F9P'si RTK'sız
+    tek noktada, sahada bir ölü ağaç ve bir yeni dikilmiş ağaç; 3 koşu):
+
+    | | `map` hatası ortalama | p95 |
+    |---|---|---|
+    | Gövdeler kapalı (F9P tek nokta) | 0,75 m | 1,6 m |
+    | **Gövdeler açık** | **0,05 m** | **0,14–0,18 m** |
+
+    Denetim üç koşuda da ölü ağacı (`S1-3`) ve yeni gövdeyi (gerçek yerinden
+    ~0,4–0,8 m) buldu. ⚠️ Aykırı ayıklama eklenmeden önce bir koşuda p95
+    0,45 m'ye çıkmıştı: yeni gövde haritadaki komşusuyla eşleşip çözümü
+    büküyordu.
+  - ⚠️ **Gerçek dedektör yok.** Gerçekte bu tespitleri 360° kameranın canlı
+    görüntüsünde çalışan bir gövde modeli üretecek (orchadOS'un ofis
+    tıklamalarıyla eğitilecek) ve kayıt sürerken canlı görüntünün alınabildiği
+    SDK'da doğrulanmadı. Pi 4'te süre: masaüstünde kare başına ~30 ms;
+    Pi'da ölçülecek (`max_rate_hz` 2).
 
 ## Açık kalanlar
 

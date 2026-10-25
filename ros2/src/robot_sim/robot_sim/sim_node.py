@@ -249,6 +249,11 @@ class SimNode(Node):
         self.declare_parameter("kit_fake_dir", "/tmp/fake_kit")
         self.declare_parameter("kit_gnss_rate_hz", 5.0)
         self.declare_parameter("kit_time_to_fix_s", 8.0)
+        # The kit's 360° camera as a TRUNK DETECTOR (robot_kit/trunk_sim.py):
+        # every obstacle — surveyed or not — is a trunk it may see. Publishes
+        # kit/trunks while the kit is plugged in and kit_cam360 is in TF.
+        # 0 = off. (Pi 4 detection rates, not the camera's 30 fps.)
+        self.declare_parameter("kit_trunks_rate_hz", 0.0)
 
         p = self.get_parameter
         self._rng = random.Random(int(p("seed").value))
@@ -451,6 +456,14 @@ class SimNode(Node):
             # cfg_writes must stay 0 — the robot never configures the kit's F9P.
             self._kit_oracle_pub = self.create_publisher(String, "sim/kit_f9p", 10)
             self.create_timer(1.0 / p("kit_gnss_rate_hz").value, self._publish_kit_gnss)
+        if p("kit_trunks_rate_hz").value > 0.0:
+            from robot_kit.hw import FilePresence
+            from robot_missions_interfaces.msg import TrunkDetections
+
+            self._trunk_presence = FilePresence(os.path.join(p("kit_fake_dir").value, "present"))
+            self._trunk_rng = random.Random(p("seed").value + 11)
+            self._trunks_pub = self.create_publisher(TrunkDetections, "kit/trunks", 5)
+            self.create_timer(1.0 / p("kit_trunks_rate_hz").value, self._publish_trunks)
         if self._station is not None:
             self.create_timer(1.0 / p("dock_detection_rate_hz").value, self._publish_dock)
 
@@ -831,6 +844,31 @@ class SimNode(Node):
         self._kit_oracle_pub.publish(String(data=json.dumps({
             "solution": solution_name(fix), "cfg_writes": self._kit_f9p.cfg_writes,
             "rtcm_frames": self._kit_f9p.rtcm_frames})))
+
+    def _publish_trunks(self) -> None:
+        from robot_kit.trunk_sim import detect
+        from robot_missions_interfaces.msg import TrunkDetections
+
+        if not self._trunk_presence.read():
+            return
+        try:
+            tf = self._tf_buffer.lookup_transform("base_link", "kit_cam360", Time())
+        except TransformException:
+            return                      # chip not read yet: no camera to see with
+        t, q = tf.transform.translation, tf.transform.rotation
+        cam_yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        pose = self._world.pose
+        cx = pose.x + t.x * math.cos(pose.yaw) - t.y * math.sin(pose.yaw)
+        cy = pose.y + t.x * math.sin(pose.yaw) + t.y * math.cos(pose.yaw)
+        trunks = [(o.x, o.y, o.radius) for o in self._bumpable]
+        found = detect((cx, cy, t.z, pose.yaw + cam_yaw), trunks, self._trunk_rng)
+        msg = TrunkDetections()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "kit_cam360"
+        msg.bearing = [float(d.bearing) for d in found]
+        msg.depression = [float(d.depression) for d in found]
+        msg.confidence = [float(d.confidence) for d in found]
+        self._trunks_pub.publish(msg)
 
     def destroy_node(self) -> bool:
         if self._kit_port is not None:

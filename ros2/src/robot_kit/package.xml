@@ -18,8 +18,14 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
+  <!-- trunk_localizer: the site's trees, the detections message, /fromLLArray -->
+  <exec_depend>robot_missions</exec_depend>
+  <exec_depend>robot_missions_interfaces</exec_depend>
+  <exec_depend>robot_localization</exec_depend>
+  <exec_depend>geographic_msgs</exec_depend>
   <exec_depend>python3-serial</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
   <!-- the presence pin on the Pi; imported only there (hw.GpioPresence) -->
   <exec_depend>python3-libgpiod</exec_depend>
 

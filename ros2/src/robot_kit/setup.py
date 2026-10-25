@@ -26,6 +26,7 @@ setup(
             "fake_kit = robot_kit.fake_kit:main",
             "kit_camera = robot_kit.kit_camera_node:main",
             "fake_camera_shim = robot_kit.fake_camera_shim:main",
+            "trunk_localizer = robot_kit.trunk_localizer_node:main",
         ],
     },
 )
