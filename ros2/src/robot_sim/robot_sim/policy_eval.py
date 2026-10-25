@@ -37,7 +37,7 @@ from robot_missions_interfaces.srv import PolicyArm
 
 
 def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds: float,
-             offset: float, direction: str = "ccw") -> Dict:
+             offset: float, direction: str = "ccw", camera: str = "front") -> Dict:
     from robot_sim.edge_batch import Stack
     from robot_sim.edge_expert import EdgeExpert, ExpertConfig, edge_metrics
     from robot_sim.lawn_gen import random_lawn
@@ -49,7 +49,8 @@ def run_lawn(driver, seed: int, mode: str, python: str, checkpoint: str, seconds
     with open(site_file, "w", encoding="utf-8") as handle:
         json.dump({"type": "FeatureCollection",
                    "features": [area_feature("cim", lawn, 41.0, 29.0)]}, handle)
-    stack = Stack(workdir, site_file, os.path.join(workdir, "episodes"), seed, "quiet", 10.0)
+    stack = Stack(workdir, site_file, os.path.join(workdir, "episodes"), seed, "quiet", 10.0,
+                  camera)
     poses: List = []
     speeds: Dict[str, List[float]] = {"asked": [], "passed": [], "true": []}
     turns: List[float] = []                     # the policy's asked w, beside "asked"
@@ -155,6 +156,8 @@ def main(argv=None) -> int:
     parser.add_argument("--offset", type=float, default=0.4)
     parser.add_argument("--directions", default="ccw",
                         help="ccw,cw: each lawn both ways (packs with edge.dir in the state)")
+    parser.add_argument("--camera", choices=("front", "edge"), default="front",
+                        help="the camera the policy was trained on (edge_batch --camera)")
     parser.add_argument("--no-expert", action="store_true")
     args = parser.parse_args(argv)
 
@@ -170,7 +173,7 @@ def main(argv=None) -> int:
                     print(f"lawn {seed} {direction}: {mode}", flush=True)
                     result = run_lawn(driver, seed, mode, args.python,
                                       os.path.expanduser(args.checkpoint), args.seconds,
-                                      args.offset, direction)
+                                      args.offset, direction, args.camera)
                     print("  " + json.dumps(result), flush=True)
                     results.append(result)
     finally:

@@ -30,6 +30,11 @@ import time
 from typing import Dict, List, Optional
 
 QUIET_GPS = ["-p", "gps_wander_sigma:=0.0", "-p", "gps_noise_sigma:=0.02"]
+# What camera/image_raw shows (docs/learning.md 6e). edge: the CANDIDATE
+# wide-angle camera looking down at the front (robot.urdf.xacro) — pinhole,
+# 110 deg; a real one would be a fisheye.
+CAMERAS = {"front": [],
+           "edge": ["-p", "camera_frame:=edge_camera_optical_link", "-p", "camera_hfov:=1.92"]}
 ESP32_LINK = "/tmp/fake_esp32"
 
 
@@ -37,7 +42,7 @@ class Stack:
     """sim_node + robot.launch.py (+ the expert), killed as one."""
 
     def __init__(self, workdir: str, site_file: str, episodes_dir: str, seed: int,
-                 gps: str, camera_hz: float):
+                 gps: str, camera_hz: float, camera: str = "front"):
         self.procs: List[subprocess.Popen] = []
         self.workdir = workdir
         self.site_file = site_file
@@ -46,6 +51,7 @@ class Stack:
                "-p", f"ground_seed:={seed}", "-p", f"camera_rate_hz:={camera_hz}"]
         if gps == "quiet":
             sim += QUIET_GPS
+        sim += CAMERAS[camera]
         self.spawn(sim)
         time.sleep(3.0)
         self.spawn(["ros2", "launch", "robot_bringup", "robot.launch.py",
@@ -143,7 +149,8 @@ class Driver:
 
 
 def run_lawn(driver: Driver, seed: int, out: str, gps: str, directions: List[str],
-             camera_hz: float, offset: float, lap_timeout: float) -> List[str]:
+             camera_hz: float, offset: float, lap_timeout: float,
+             camera: str = "front") -> List[str]:
     from robot_sim.lawn_gen import random_lawn
     from robot_sim.site_world import area_feature
     lawn = random_lawn(seed)
@@ -152,7 +159,7 @@ def run_lawn(driver: Driver, seed: int, out: str, gps: str, directions: List[str
     with open(site_file, "w", encoding="utf-8") as handle:
         json.dump({"type": "FeatureCollection",
                    "features": [area_feature("cim", lawn, 41.0, 29.0)]}, handle)
-    stack = Stack(workdir, site_file, out, seed, gps, camera_hz)
+    stack = Stack(workdir, site_file, out, seed, gps, camera_hz, camera)
     names = []
     try:
         driver.recorder = driver.expert = None
@@ -164,6 +171,7 @@ def run_lawn(driver: Driver, seed: int, out: str, gps: str, directions: List[str
             driver.expert = None
             driver.wait(lambda: driver.expert is not None, 30.0, "the expert")
             note = {"seed": seed, "direction": direction, "gps": gps, "offset_m": offset,
+                    "camera": camera,
                     "lawn_wkt": lawn.wkt, "expert": "robot_sim edge_expert (privileged)"}
             name = driver.episode("start", {"task": "kenar takibi (uzman)", "mode": "demo",
                                             "note": json.dumps(note)})
@@ -194,6 +202,7 @@ def main(argv=None) -> int:
     parser.add_argument("--gps", choices=("quiet", "neo6m"), default="neo6m")
     parser.add_argument("--directions", default="ccw,cw")
     parser.add_argument("--camera-hz", type=float, default=10.0)
+    parser.add_argument("--camera", choices=sorted(CAMERAS), default="front")
     parser.add_argument("--offset", type=float, default=0.4)
     parser.add_argument("--lap-timeout", type=float, default=300.0)
     args = parser.parse_args(argv)
@@ -207,7 +216,7 @@ def main(argv=None) -> int:
             seed = args.seed + i
             print(f"lawn {i + 1}/{args.lawns} (seed {seed})")
             made += run_lawn(driver, seed, args.out, args.gps, args.directions.split(","),
-                             args.camera_hz, args.offset, args.lap_timeout)
+                             args.camera_hz, args.offset, args.lap_timeout, args.camera)
     finally:
         driver.close()
         rclpy.try_shutdown()

@@ -33,6 +33,13 @@
        WHOLE in the frame right up to the contacts (robot_sim/dock_model.py,
        docs/handoff.md "İstasyon etiketi"). 0.35 (20 deg) cut it off. -->
   <xacro:property name="camera_pitch" value="0.09"/>
+  <!-- CANDIDATE second camera (docs/learning.md 6e): a wide-angle USB camera
+       on a short post at the front, looking well down at the ground beside
+       the robot — where the trimmer works. Not bought: the simulator renders
+       it (sim_node camera_frame:=edge_camera_optical_link) to decide whether
+       it is worth buying. -->
+  <xacro:property name="edge_camera_pitch" value="0.87"/>   <!-- 50 deg down -->
+  <xacro:property name="edge_camera_z" value="0.40"/>
   <!-- Deck sits just above the axle. -->
   <xacro:property name="base_z" value="${wheel_radius + 0.02}"/>
 
@@ -206,6 +213,19 @@
   <joint name="camera_optical_joint" type="fixed">
     <parent link="camera_link"/>
     <child link="camera_optical_link"/>
+    <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+  </joint>
+
+  <link name="edge_camera_link"/>
+  <joint name="edge_camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="edge_camera_link"/>
+    <origin xyz="${base_length/2.0} 0 ${edge_camera_z}" rpy="0 ${edge_camera_pitch} 0"/>
+  </joint>
+  <link name="edge_camera_optical_link"/>
+  <joint name="edge_camera_optical_joint" type="fixed">
+    <parent link="edge_camera_link"/>
+    <child link="edge_camera_optical_link"/>
     <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
   </joint>
 
