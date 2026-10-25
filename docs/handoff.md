@@ -739,8 +739,14 @@ Alanlar hem **masada haritadan çizilecek** hem **öğret-kaydet** ile kaydedile
       uzman düzeyine indi (2.9–3.9 cm), ama köşelerde sağa-sola titriyor
       (dk'da 27 yön değişimi) ve bir sahada dışarı yöneldi (kapı durdurdu).
       Checkpoint `~/.robot/policies/act_edge_18_acc` (Kaggle `hoverbot-edge-train-cam`).
-    - **Sıradaki:** otomatik DAgger (6d-4: titreme + sapma durumlarına uzman
-      etiketi); ikinci kamera deneyi
+    - ✅ 6d-4 titremenin sebebi: **yön belirsizliği** (bölümlerin yarısı ccw,
+      yarısı cw; ACT görev metnini kullanmıyor). Durumda `edge.dir` (+1/−1,
+      bölüm notundan; `policy_node -p direction:=`). Saha 20/22: 150 s'de
+      ~1.7–1.9 tur, uzman hızında, hata 3.6–7.7 cm. Saha 21 iki yönde de
+      dışarı (kenar başlangıca 2.1 m — eğitimdekilerden yakın); kapı durdurdu.
+      Checkpoint `~/.robot/policies/act_edge_18_dir` (Kaggle `hoverbot-edge-train-dir`).
+    - **Sıradaki:** otomatik DAgger (6d-5: politika sürer, uzman etiketler;
+      saha 21 gibi durumlar); ikinci kamera deneyi
       (kamera alımına o karar versin); Pi 4'te çıkarım süresi. Donanım
       tarafında B1 (flash) hâlâ darboğaz.
   - Sahada ilk kullanım için `robot.service`'e `site_file:=` eklenmeli
