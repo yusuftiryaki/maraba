@@ -21,6 +21,13 @@ left the area: those last metres are the most useful labels there are), the
 expert counts the laps done, or --seconds runs out. mode "autonomous": the
 policy drove; the note says which checkpoint.
 
+TAKEOVER (--takeover-s, 0 = off): once the expert's label has said "turn on
+the spot" for that long, the expert takes the wheel (edge_expert drive:=true:
+cmd_vel_teleop, which twist_mux puts above the policy) until it has driven
+forward for --handback-s, then hands back. ⚠️ Without it (round 1) a lost
+policy sat in one state for minutes: one episode was 124 s of the SAME "turn"
+label, 87-91 % of the failures' frames — the retrained policy learned to spin.
+
 ⚠️ Episodes need edge.dir: the note carries the direction, as edge_batch's.
 """
 
@@ -35,10 +42,50 @@ import tempfile
 import time
 from typing import Dict, List
 
+from geometry_msgs.msg import Twist
+from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
+from rcl_interfaces.srv import SetParameters
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from std_msgs.msg import String
 
 from robot_missions_interfaces.srv import PolicyArm
+
+
+def set_expert_drive(driver, drive: bool) -> None:
+    request = SetParameters.Request()
+    request.parameters = [Parameter(name="drive", value=ParameterValue(
+        type=ParameterType.PARAMETER_BOOL, bool_value=drive))]
+    result = driver.call(SetParameters, "/edge_expert/set_parameters", request, timeout=5.0)
+    if not result.results[0].successful:
+        raise RuntimeError(f"edge_expert drive:={drive}: {result.results[0].reason}")
+
+
+class Takeover:
+    """When the expert drives: after takeover_s of "turn on the spot" labels,
+    until handback_s of forward ones. Stepped with each label."""
+
+    def __init__(self, takeover_s: float, handback_s: float):
+        self.takeover_s, self.handback_s = takeover_s, handback_s
+        self.expert_drives = False
+        self._since = None
+        self.count = 0
+
+    def label(self, t: float, v: float, w: float) -> bool:
+        """True when expert_drives changed."""
+        if self.takeover_s <= 0.0:
+            return False
+        waiting_for = (v > 0.1) if self.expert_drives else (abs(v) < 0.03 and abs(w) > 0.5)
+        if not waiting_for:
+            self._since = None
+            return False
+        if self._since is None:
+            self._since = t
+        if t - self._since < (self.handback_s if self.expert_drives else self.takeover_s):
+            return False
+        self.expert_drives = not self.expert_drives
+        self.count += self.expert_drives
+        self._since = None
+        return True
 
 
 def run_lawn(driver, seed: int, direction: str, args) -> Dict:
@@ -71,14 +118,23 @@ def run_lawn(driver, seed: int, direction: str, args) -> Dict:
             raise RuntimeError("policy_node died: " + open(log, encoding="utf-8").read()[-800:])
         note = {"seed": seed, "direction": direction, "gps": args.gps, "offset_m": args.offset,
                 "lawn_wkt": lawn.wkt, "expert": "robot_sim edge_expert (privileged, labels only)",
-                "driver": f"policy {os.path.basename(args.checkpoint.rstrip('/'))}"}
-        name = driver.episode("start", {"task": "kenar takibi (uzman)", "mode": "autonomous",
+                "driver": f"policy {os.path.basename(args.checkpoint.rstrip('/'))}",
+                "takeover_s": args.takeover_s}
+        # intervention: the policy drove, the expert took the wheel at times.
+        mode = "intervention" if args.takeover_s > 0 else "autonomous"
+        name = driver.episode("start", {"task": "kenar takibi (uzman)", "mode": mode,
                                         "note": json.dumps(note)})
         driver.wait(lambda: (driver.recorder or {}).get("ready"), 60.0, "READY")
         gate: List[Dict] = []
         gate_sub = driver.node.create_subscription(
             String, "/policy_gate/state", lambda m: gate.append(json.loads(m.data)),
             QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        takeover = Takeover(args.takeover_s, args.handback_s)
+        labels: List = []
+        label_sub = driver.node.create_subscription(
+            Twist, "/expert/cmd_vel",
+            lambda m: labels.append((time.monotonic(), m.linear.x, m.angular.z)), 10)
+        driven_s, driven_since = 0.0, None
         driver.trigger("/edge_expert/start")       # labels from here on
         request = PolicyArm.Request()
         request.area = json.dumps([list(p) for p in lawn.exterior.coords[:-1]])
@@ -89,6 +145,16 @@ def run_lawn(driver, seed: int, direction: str, args) -> Dict:
         end, ended = time.monotonic() + args.seconds, "time"
         while time.monotonic() < end:
             driver.rclpy.spin_once(driver.node, timeout_sec=0.1)
+            changed = False
+            while labels:
+                changed |= takeover.label(*labels.pop(0))
+            if changed:
+                set_expert_drive(driver, takeover.expert_drives)
+                now = time.monotonic()
+                if takeover.expert_drives:
+                    driven_since = now
+                else:
+                    driven_s += now - driven_since
             if (driver.expert or {}).get("state") == "done":
                 ended = "laps done"
                 break
@@ -98,9 +164,13 @@ def run_lawn(driver, seed: int, direction: str, args) -> Dict:
                 ended = f"gate: {gate[-1].get('reason')}"
                 break
         driver.node.destroy_subscription(gate_sub)
+        driver.node.destroy_subscription(label_sub)
+        if takeover.expert_drives:
+            driven_s += time.monotonic() - driven_since
         driver.episode("stop", {"outcome": "success" if ended == "laps done" else "failure",
                                 "note": ended})
-        outcome.update(episode=name, ended=ended,
+        outcome.update(episode=name, ended=ended, takeovers=takeover.count,
+                       expert_drove_s=round(driven_s, 1),
                        progress_m=(driver.expert or {}).get("progress_m"),
                        length_m=(driver.expert or {}).get("length_m"))
     finally:
@@ -123,6 +193,9 @@ def main(argv=None) -> int:
     parser.add_argument("--offset", type=float, default=0.4)
     parser.add_argument("--laps", type=float, default=1.0)
     parser.add_argument("--seconds", type=float, default=150.0)
+    parser.add_argument("--takeover-s", type=float, default=3.0,
+                        help="expert takes the wheel after this long turning on the spot")
+    parser.add_argument("--handback-s", type=float, default=2.0)
     args = parser.parse_args(argv)
     args.checkpoint = os.path.expanduser(args.checkpoint)
 
