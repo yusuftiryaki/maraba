@@ -96,6 +96,11 @@ class SiteMapServer(Node):
         p = self.get_parameter
         path = p("site_file").value
         self._site: Site = load_site(path, missing_ok=True) if path else Site()
+        if not path:
+            # Fine in the simulator; on the robot it is robot.service missing
+            # site_file:= (deploy/robot.service) — and nothing the web page
+            # saves would survive a restart.
+            self.get_logger().warn("no site_file: empty site — free map, no missions")
         self._status = (DiagnosticStatus.WARN, "waiting for navsat_transform")
         self._problems: list[str] = []
         self._published = False

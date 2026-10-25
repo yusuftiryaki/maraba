@@ -155,41 +155,19 @@ Test: Pi'da `ros2 run demo_nodes_cpp talker`, dev makinede `ros2 topic list` →
 
 ## Adım 8 — Açılışta otomatik başlatma (systemd)
 
-Robotun bringup launch'ı boot'ta otomatik kalksın:
-```ini
-# /etc/systemd/system/robot.service
-[Unit]
-Description=Robot bringup
-After=network-online.target
-
-[Service]
-Type=simple
-User=enes
-# donanım hazır olsun diye küçük gecikme
-ExecStartPre=/bin/sleep 5
-ExecStart=/bin/bash -lc 'source /opt/ros/jazzy/setup.bash && \
-  source /home/enes/howerboard/ros2/install/setup.bash && \
-  ros2 launch robot_bringup robot.launch.py site_file:=/home/enes/site.geojson \
-    episodes_dir:=/mnt/ssd/episodes'
-# episodes_dir: learning mode's recordings (docs/learning.md) — on the USB 3
-# SSD, never the SD card (~2.7 GB/hour with the camera). Mount it in fstab
-# with `nofail`, or a missing SSD stops the robot from booting.
-# site_file: the site (docs/missions.md) — the web page (http://<robot>:8080/)
-# edits it; the file does not have to exist yet, the first save creates it.
-# Missions, the survey map and home all come from it.
-# ⚠️ always, NOT on-failure: nav2_watchdog shuts the launch down when Nav2
-# hangs in bring-up, and `ros2 launch` then exits 0 (measured) — on-failure
-# would leave the robot off. `systemctl stop` still stops it for good.
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-```
+Robotun bringup launch'ı boot'ta otomatik kalksın. Birim dosyası repoda:
+**`deploy/robot.service`** (elle `/etc`'de düzenleme — `deploy.sh` kurulu
+kopya repodakinden farklıysa uyarır). Pi'da, repodan:
 ```bash
-sudo systemctl enable --now robot.service
-journalctl -u robot.service -f    # logları izle
+./scripts/install_service.sh --now   # kurar, etkinleştirir, (yeniden) başlatır
+journalctl -u robot.service -f       # logları izle
 ```
+Kurulum betiği `site_file:=` yoksa ya da dizini yoksa durur: site dosyası
+olmadan robot **boş bir sahayla** kalkar (serbest harita, görev yok, sayfadan
+kaydedilenler yeniden başlatmada kaybolur — `site_map_server` bunu logda
+uyarır). İçindekiler ve gerekçeleri dosyanın yorumlarında: `site_file`,
+`episodes_dir` (USB SSD, fstab'da `nofail`), `Restart=always`.
+
 > **Nav2 açılış izleyicisi (`nav2_watchdog`):** Nav2 1.3.13'ün lifecycle
 > manager'ı bir `change_state` cevabı düşerse **sonsuza kadar** bekliyor (Nav2
 > hiç aktifleşmez, hiçbir şey hata vermez). İzleyici Nav2 120 sn aktif olmazsa
