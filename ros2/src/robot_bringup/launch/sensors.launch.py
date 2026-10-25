@@ -99,7 +99,10 @@ def generate_launch_description():
                 "useRMC": False,       # GGA carries the fix quality we want
                 "use_sim_time": use_sim_time,
             }],
-            remappings=[("fix", "gps/fix")],
+            # vel: the Doppler velocity from VTG (useRMC false) — jam_monitor's
+            # stall check (jam.py). ⚠️ The NEO-6M sends 1 Hz from the factory;
+            # UBX-CFG-RATE to 5 Hz (docs/deployment.md step 4) makes it ~2x faster.
+            remappings=[("fix", "gps/fix"), ("vel", "gps/vel")],
         ),
 
         # Pi Camera V2 over CSI: the charging-station marker (SP3) and, later,

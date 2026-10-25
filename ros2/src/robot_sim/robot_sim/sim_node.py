@@ -46,7 +46,7 @@ import math
 import random
 
 import rclpy
-from geometry_msgs.msg import PoseStamped, Quaternion, TransformStamped
+from geometry_msgs.msg import PoseStamped, Quaternion, TransformStamped, TwistStamped
 from nav_msgs.msg import OccupancyGrid, Odometry
 from rclpy.exceptions import ParameterUninitializedException
 from rclpy.executors import ExternalShutdownException
@@ -230,6 +230,11 @@ class SimNode(Node):
         self.declare_parameter("gps_wander_sigma", 2.0)   # steady-state std, m
         self.declare_parameter("gps_wander_tau", 60.0)    # correlation time, s
         self.declare_parameter("gps_noise_sigma", 1.0)    # white, m
+        # gps/vel — the receiver's Doppler velocity (NEO-6M VTG; nmea_serial_driver's
+        # `vel`). Measured from the carrier frequency, not from positions, so it
+        # does NOT carry the wander above: white, 0.1 m/s per axis (the
+        # datasheet's velocity accuracy). jam_monitor's stall check rests on it.
+        self.declare_parameter("gps_vel_noise_sigma", 0.1)  # m/s
 
         p = self.get_parameter
         self._rng = random.Random(int(p("seed").value))
@@ -342,6 +347,8 @@ class SimNode(Node):
         self._gps_wander_sigma = p("gps_wander_sigma").value
         self._gps_wander_tau = p("gps_wander_tau").value
         self._gps_noise_sigma = p("gps_noise_sigma").value
+        self._gps_vel_noise_sigma = p("gps_vel_noise_sigma").value
+        self._gps_last_antenna: tuple[float, float, float] | None = None   # t, x, y
         self._datum_lat = p("datum_lat").value
         self._datum_lon = p("datum_lon").value
         self._gps_bias_x = 0.0
@@ -376,6 +383,7 @@ class SimNode(Node):
         self._imu_pub = self.create_publisher(Imu, "imu/data_raw", 10)
         self._mag_pub = self.create_publisher(MagneticField, "imu/mag", 10)
         self._gps_pub = self.create_publisher(NavSatFix, "gps/fix", 10)
+        self._gps_vel_pub = self.create_publisher(TwistStamped, "gps/vel", 10)
         # TRANSIENT_LOCAL: the map is published once and latched, so a costmap
         # that subscribes later still receives it.
         map_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -718,6 +726,21 @@ class SimNode(Node):
         msg.position_covariance = [var, 0.0, 0.0, 0.0, var, 0.0, 0.0, 0.0, var * 4]
         msg.position_covariance_type = NavSatFix.COVARIANCE_TYPE_DIAGONAL_KNOWN
         self._gps_pub.publish(msg)
+
+        # The antenna's TRUE motion since the last fix — not world.v, which a
+        # rock that refuses the step does not zero (that is the stall). Over
+        # the elapsed time, not 1/rate: a timer late under CI load is not speed.
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self._gps_last_antenna is not None and now > self._gps_last_antenna[0]:
+            last_t, last_x, last_y = self._gps_last_antenna
+            vel = TwistStamped()
+            vel.header.stamp = msg.header.stamp
+            vel.header.frame_id = "gps_link"
+            sigma = self._gps_vel_noise_sigma
+            vel.twist.linear.x = (antenna_x - last_x) / (now - last_t) + self._rng.gauss(0, sigma)
+            vel.twist.linear.y = (antenna_y - last_y) / (now - last_t) + self._rng.gauss(0, sigma)
+            self._gps_vel_pub.publish(vel)
+        self._gps_last_antenna = (now, antenna_x, antenna_y)
 
     def destroy_node(self) -> bool:
         self._link.close()
