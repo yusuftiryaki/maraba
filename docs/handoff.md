@@ -654,6 +654,23 @@ kalır ve gerçek yığın her iki dünyada da devrededir.
 *(son güncelleme: 2026-10-18 — 5. aşama tasarımı + 5a web teleop; 2026-10-16 — görev katmanı 1. aşama; twist_mux (PR #5) ve
 SP3–SP5; altındaki "A5'ten önceki durum" sayıları 2026-09-08'den)*
 
+### 🆕 Kit soketi — orchadOS tarama kiti (2026-10-25/26): `docs/kit-soketi.md`
+Kullanıcı istekleri: robot kitsiz bağımsız; kit için hazır soket, takılınca
+kitli mod; kit v1 LiDAR'sız, v2 LiDAR'lı; repolar ayrı; kitle hız limiti
+değişmesin; ağaç haritası yalnız başlangıç tahmini (robot denetler, değiştirmez);
+ilk envanter insanla. Tek kaynak kit-soketi.md; burada yalnız durum:
+- ✅ K1 (#42, #43): `robot_kit` paketi (çip, mod, F9P, NTRIP, GPS seçici,
+  kamera shim protokolü), görev kapısı + kit kaybında duraklama, web rozeti.
+- ✅ K2a–d (#43–#45): `orchard_grid` görevi; RTK fixed / taze gövde
+  düzeltmesi varken satırlar `map`'te (odom'da pusula hatası 16 m'de 0,8–1 m
+  sapıyordu — ⚠️ NEO-6M ile biçmede bu açık hâlâ var, missions.md); devrilme
+  payı (Gazebo: arka 16,4°, sert kalkışta ön tekerlek kalkıyor); gövdelere
+  göre konum + ağaç denetimi; RTK'sız tarama koridor p95 0,23 m.
+- ✅ 6g (learning.md): 360° kamerayla ağaç etrafı ccw öğrenildi, cw değil.
+- **Kullanıcı kararı bekleyen:** kitli modda ivme limiti (motor yolu).
+- **Bloklu:** gerçek kamera shim'i (Insta360 SDK başlıkları; container
+  rebuild → `~/repos`); gerçek gövde dedektörü; tüm donanım adımları (K3).
+
 ### 🆕 Görev katmanı (2026-10-16) — tasarım + 1. aşama: `docs/missions.md`
 Kullanıcı istekleri: laptoptan haritada alan seçip **alan kaplama** (çim
 biçme, çoğunlukla bu) ya da **devriye** görevi vermek; görev tipleri çoğalacak.
