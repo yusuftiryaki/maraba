@@ -180,6 +180,46 @@ uyarır). İçindekiler ve gerekçeleri dosyanın yorumlarında: `site_file`,
 
 ---
 
+## Adım 9 — Kit soketi (soket takılınca; `docs/kit-soketi.md`)
+
+> ⚠️ **Bu adımın hiçbir satırı gerçek donanımda denenmedi** (2026-10-25).
+> Pin numaraları başlangıç önerisidir; soket takılınca `docs/wiring-map.md`'ye
+> işlenir ve multimetreyle doğrulanır.
+
+1. **Paketler:** `sudo apt install python3-libgpiod` (presence pini;
+   `rosdep install` de kurar).
+2. **Presence pini:** kit_manager `gpio_line` parametresi (varsayılan GPIO17,
+   `/dev/gpiochip0`), iç pull-up açık. Fiş takılıyken LOW okunmalı:
+   `gpioget --bias=pull-up gpiochip0 17` → `inactive`.
+3. **Kimlik çipi (1-Wire, DS2431):** `/boot/firmware/config.txt`'ye
+   `dtoverlay=w1-gpio,gpiopin=4`, yeniden başlat. Fiş takılıyken
+   `ls /sys/bus/w1/devices/` → `2d-...` görünmeli ve
+   `xxd /sys/bus/w1/devices/2d-*/eeprom | head -1` `484b4954` (`HKIT`) ile
+   başlamalı.
+4. **Kitin F9P'si (USB):** u-blox F9 USB kimliği `1546:01a9` (lsusb ile
+   doğrula). Adım 4'teki kurallara ekle:
+   ```
+   SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a9", SYMLINK+="kit_gnss"
+   ```
+   ⚠️ Robot alıcıya **hiç ayar göndermez**; NAV-PVT'nin F9P'nin USB portunda
+   açık olması orchadOS'un alıcı ayarının işi. Açık değilse kit_gnss 10 sn sonra
+   uyarır.
+5. **NTRIP (TUSAGA-Aktif):** `~/.robot/ntrip.yaml` (repoya girmez):
+   ```yaml
+   host: <caster>
+   port: 2101
+   mountpoint: <VRS mountpoint>
+   user: <kullanıcı>
+   password: <parola>
+   version: 2
+   ```
+   Dosya yoksa kit RTK'sız çalışır (F9P tek başına ~1 m); orchadOS'un PPK'sı
+   bundan etkilenmez.
+6. **robot.service:** `ExecStart` satırına `use_kit:=true` ekle. Kit takılı
+   değilken de zararsızdır: GPS NEO-6M'de kalır.
+7. **Kontrol:** `ros2 topic echo /kit/state --once` → kit takılıyken
+   `"state": "READY"`, `"gps_source": "kit"` (robot dururken geçer).
+
 ## Sıra / bağımlılıklar
 1–2 (OS + ROS) donanımdan bağımsız, **hemen yapılabilir**. 3 ROS workspace'i
 gerektiriyor (sonraki adım). 4–5 (udev, I2C) donanım Pi'a bağlanınca. 7 (DDS)

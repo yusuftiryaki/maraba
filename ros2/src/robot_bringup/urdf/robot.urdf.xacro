@@ -197,6 +197,20 @@
     <origin xyz="0 0 ${mast_height - 0.08}"/>
   </joint>
 
+  <!-- The kit socket's mounting plate (docs/kit-soketi.md, "montaj plakası"):
+       on top of the chassis, in the middle of the support polygon between the
+       drive axle (x = 0) and the casters — x = caster_x / 2, which is also the
+       chassis centre. Moving it rearward halves the tip-over margin with a 2 m
+       mast on it. The kit's own sensors (kit_gnss, kit_cam360, kit_lidar) are
+       NOT here: kit_manager publishes them from the kit's identity chip, so a
+       re-calibrated kit carries its numbers with it. -->
+  <link name="kit_mount"/>
+  <joint name="kit_mount_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="kit_mount"/>
+    <origin xyz="${caster_x/2.0} 0 ${base_z + base_height}"/>
+  </joint>
+
   <!-- Pi Camera V2, forward and slightly down for ground segmentation
        (roadmap step 7). -->
   <link name="camera_link"/>

@@ -43,6 +43,7 @@ pose, never from its wheel odometry; conflating the two would make
 from __future__ import annotations
 
 import math
+import os
 import random
 
 import rclpy
@@ -55,7 +56,7 @@ from rclpy.parameter import Parameter
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from rclpy.time import Time
 from sensor_msgs.msg import Image, Imu, MagneticField, NavSatFix, NavSatStatus
-from std_msgs.msg import Bool, Float64
+from std_msgs.msg import Bool, Float64, String
 from tf2_ros import Buffer, TransformBroadcaster, TransformException, TransformListener
 
 from hoverboard_bridge.esp32_sim import TX_PERIOD_S, Esp32Sim, PtyLink, step_once
@@ -241,6 +242,13 @@ class SimNode(Node):
         # does NOT carry the wander above: white, 0.1 m/s per axis (the
         # datasheet's velocity accuracy). jam_monitor's stall check rests on it.
         self.declare_parameter("gps_vel_noise_sigma", 0.1)  # m/s
+        # The kit's ZED-F9P (docs/kit-soketi.md), when fake_kit has "plugged" a
+        # kit into kit_fake_dir: UBX-NAV-PVT on this pty for robot_kit's
+        # kit_gnss, RTCM read back from it. "" = no kit receiver in this world.
+        self.declare_parameter("kit_gnss_link", "")
+        self.declare_parameter("kit_fake_dir", "/tmp/fake_kit")
+        self.declare_parameter("kit_gnss_rate_hz", 5.0)
+        self.declare_parameter("kit_time_to_fix_s", 8.0)
 
         p = self.get_parameter
         self._rng = random.Random(int(p("seed").value))
@@ -427,6 +435,22 @@ class SimNode(Node):
         self.create_timer(1.0 / p("imu_rate_hz").value, self._publish_imu)
         self.create_timer(1.0 / p("mag_rate_hz").value, self._publish_mag)
         self.create_timer(1.0 / p("gps_rate_hz").value, self._publish_gps)
+        self._kit_port = None
+        if p("kit_gnss_link").value:
+            from robot_kit.f9p_sim import F9pSim
+            from robot_kit.fake_kit import Pty
+            from robot_kit.hw import FilePresence
+
+            self._kit_port = Pty(p("kit_gnss_link").value)
+            self._kit_f9p = F9pSim(seed=p("seed").value + 7,
+                                   time_to_fix_s=p("kit_time_to_fix_s").value)
+            self._kit_presence = FilePresence(os.path.join(p("kit_fake_dir").value, "present"))
+            self._kit_mount = None
+            self._kit_last_antenna = None
+            # ⚠️ An ORACLE like /ground_truth: what the fake receiver saw.
+            # cfg_writes must stay 0 — the robot never configures the kit's F9P.
+            self._kit_oracle_pub = self.create_publisher(String, "sim/kit_f9p", 10)
+            self.create_timer(1.0 / p("kit_gnss_rate_hz").value, self._publish_kit_gnss)
         if self._station is not None:
             self.create_timer(1.0 / p("dock_detection_rate_hz").value, self._publish_dock)
 
@@ -765,7 +789,52 @@ class SimNode(Node):
             self._gps_vel_pub.publish(vel)
         self._gps_last_antenna = (now, antenna_x, antenna_y)
 
+    def _publish_kit_gnss(self) -> None:
+        """The kit antenna's fix, from the chip's calibration via TF.
+
+        The antenna's position is looked up as base_link -> kit_gnss, which
+        only exists once kit_manager has read the (fake) chip and published
+        kit_mount -> kit_gnss. So a broken calibration chain — wrong frame
+        names, a mount in the wrong place, a chip never read — shows up here
+        as no fix or a wrong one, exactly as it would on the robot."""
+        import json
+
+        now = self.get_clock().now().nanoseconds * 1e-9
+        self._kit_f9p.feed(self._kit_port.read(), now)
+        if not self._kit_presence.read():
+            self._kit_mount = None          # unplugged: the USB device is gone
+            self._kit_last_antenna = None
+            return
+        if self._kit_mount is None:
+            try:
+                tf = self._tf_buffer.lookup_transform("base_link", "kit_gnss", Time())
+            except TransformException:
+                return
+            t = tf.transform.translation
+            self._kit_mount = (t.x, t.y, t.z)
+        mx, my, mz = self._kit_mount
+        pose = self._world.pose
+        x = pose.x + mx * math.cos(pose.yaw) - my * math.sin(pose.yaw)
+        y = pose.y + mx * math.sin(pose.yaw) + my * math.cos(pose.yaw)
+        vel_e = vel_n = 0.0
+        if self._kit_last_antenna is not None and now > self._kit_last_antenna[0]:
+            last_t, last_x, last_y = self._kit_last_antenna
+            vel_e, vel_n = (x - last_x) / (now - last_t), (y - last_y) / (now - last_t)
+        self._kit_last_antenna = (now, x, y)
+        lat = self._datum_lat + math.degrees(y / EARTH_RADIUS_M)
+        lon = self._datum_lon + math.degrees(
+            x / (EARTH_RADIUS_M * math.cos(math.radians(self._datum_lat))))
+        fix = self._kit_f9p.nav_pvt(now, lat, lon, mz, vel_e=vel_e, vel_n=vel_n)
+        from robot_kit.ubx import encode_nav_pvt, solution_name
+
+        self._kit_port.write(encode_nav_pvt(fix))
+        self._kit_oracle_pub.publish(String(data=json.dumps({
+            "solution": solution_name(fix), "cfg_writes": self._kit_f9p.cfg_writes,
+            "rtcm_frames": self._kit_f9p.rtcm_frames})))
+
     def destroy_node(self) -> bool:
+        if self._kit_port is not None:
+            self._kit_port.close()
         self._link.close()
         return super().destroy_node()
 

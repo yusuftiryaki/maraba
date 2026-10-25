@@ -338,6 +338,42 @@ göre ayarlanması, akünün direk dibinde olması; v2'de Pi 5'in topic sözleş
 | **K3** | Robotta plaka ve soket; kitte fiş ve çip (orchadOS). İlk denenecekler: Camera SDK'nın Pi'da çalışması, **kayıt sürerken canlı görüntü**, ısınma, USB'nin konnektörden geçişi, manyetometrede yön kontrolü | soket parçaları + kit |
 | **K4** | v2: Ethernet + DDS, LiDAR engel katmanı | LiDAR'lı kit |
 
+## K1: yapılanlar (`robot_kit`, donanımsız)
+
+```
+fake_kit / Pi pini + DS2431 ─► kit_manager ─► kit/state (latched), tf kit_mount -> kit_*
+sim_node'un F9P'si / /dev/kit_gnss ─► kit_gnss ─► kit/gnss/fix ─┐
+NEO-6M ───────────────────────────► gps/neo6m/fix ──────────────┴► gps_selector ─► gps/fix ─► navsat
+TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
+```
+
+- **ROS'suz çekirdek, hepsi testli:** `manifest.py` (çip formatı + test
+  vektörleri `robot_kit/test/vectors/`), `state.py` (durum makinesi), `ubx.py`
+  (NAV-PVT; **CFG yazacak kod yok**), `rtcm.py`, `ntrip.py` (VRS için GGA,
+  NTRIP 2 chunked, "SOURCETABLE 200" hata sayılıyor), `f9p_sim.py` (sahte F9P:
+  RTCM gelince float, 8 sn sonra fixed; kendisine yazılan her CFG'yi sayıyor),
+  `hw.py` (gpiod + w1 sysfs; sahteleri dosya).
+- **Düğümler:** `kit_manager`, `kit_gnss`, `gps_selector`, `ntrip_client`;
+  `fake_kit` (plug/unplug/blank/gnss/caster). `robot.launch.py use_kit:=true`
+  ile açılıyor (varsayılan kapalı; robotta Adım 9, `docs/deployment.md`).
+  `use_kit` açıkken NEO-6M `gps/neo6m/*`'e taşınıyor.
+- **sim_node:** `kit_gnss_link` ile kitin F9P'sini bir pty'de koşturuyor.
+  Antenin yeri `base_link -> kit_gnss` TF'inden, yani sahte çipten okunan
+  kalibrasyondan geliyor; zincirde bir hata yanlış konum olarak görünür.
+- **Ölçülen** (`test_kit_stack.py`, kinematik sim, 2026-10-25): robotun `map`'teki
+  konumu ile gerçek lat/lon'unun `map`'e düştüğü yer arasındaki fark (datum
+  hatası iki tarafta da var, sadeleşiyor):
+
+  | | dururken | 0,3 m/s |
+  |---|---|---|
+  | NEO-6M (sim gürültüsü) | 0,99 m | — |
+  | Kit, RTK fixed | **0,012 m** (en kötü 0,017) | 0,019 m (en kötü 0,036) |
+
+  Aynı test: GPS kaynağı robot hareket ederken değişmiyor, durunca değişiyor;
+  boş çip kit sayılmıyor; robot F9P'ye hiç CFG yazmıyor (sahte alıcı sayıyor).
+- ⚠️ Bu sayılar sahte bir F9P'nin "iyi gün" gürültüsü. Ağaç altında RTK'nın ne
+  yaptığı bir saha ölçümü (K3).
+
 ## Açık kalanlar
 
 - **Kayıt sürerken canlı görüntü alınabiliyor mu?** SDK belgesi söylemiyor.
