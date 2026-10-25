@@ -395,6 +395,18 @@ TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
   derlenecek. O zamana kadar `cam360_ctrl`'lü bir kit robotta DEGRADED kalır
   (kamera sessiz) ve kamera isteyen görevler reddedilir — kayıtsız tarama yerine.
 
+## K2: yapılanlar (simülatör)
+
+- ✅ **K2a — `orchard_grid` görevi** (`docs/missions.md`, aynı adlı bölüm):
+  ağaçlar sahada `ağaç` poi'leri; koridorlar sıraların ortasında, iki yönde.
+  Kit kapısı, kameranın kayıt başlat/durdur ve arıza duraklatması runner'da.
+  Ölçülen (`test_orchard_stack.py`, 3×2 ağaç, 5 m aralık, RTK + sahte kamera):
+  kitsiz başlatma reddedildi; tarama 6 dk, 6 ağacın hepsi dört yönden geçildi,
+  temas yok, kamera tarama boyunca kaydetti ve sonunda durdu.
+  ⚠️ **Yolda bulunan:** odom'a çapalı satırlar RTK'da bile pusula hatası
+  kadar eğik gidiyordu (16 m'de 0,8–1 m); RTK fixed'da satırlar artık `map`'te
+  sürülüyor, sapma p95 0,095 m.
+
 ## Açık kalanlar
 
 - **Kayıt sürerken canlı görüntü alınabiliyor mu?** SDK belgesi söylemiyor.

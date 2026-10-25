@@ -90,6 +90,7 @@ Laptop tarayıcı (uydu haritası)        Pi
 | `patrol` | Çevre turu ya da alan içinde rastgele noktalar, tekrar | `mode`, `laps` (0 = süresiz), `dwell_s` |
 | `route` | Kaydedilmiş/çizilmiş waypoint dizisi | `repeat` |
 | `goto` | Tek nokta | — |
+| `orchard_grid` | orchadOS grid taraması: ağaç sıralarının arasındaki koridorlar, iki yönde (kit gerekir) | `angle_deg`, `directions`, `outer`, `boundary_margin` |
 
 - Görev tipi = "alan + parametreler → `map`'te yol" üreten saf bir fonksiyon.
 - Kaplama planlayıcısı kendimiz (boustrophedon): robot diferansiyel sürüşlü,
@@ -617,6 +618,44 @@ tetiklendi. Gürültülü GPS'te map→odom'un oynaması normal: tek başına
 bozulma sinyali değil. Alan çiti de değil: robotun `map` tahmini GPS hatası
 kadar kayık, çit payı 2–5 m olmak zorunda.
 
+## `orchard_grid`: kitle bahçe taraması (K2, 2026-10-26; `docs/kit-soketi.md`)
+- **Ağaçlar sahada `poi`, etiket `ağaç`, `radius_m` ile** (orchadOS envanteri bu
+  şekilde dışa aktarır; adı ağaç kodu, örn. `S5-12a`). Zaten engel sayılıyorlar;
+  planlayıcı ayrıca yerlerini okuyor. `kuyu` gibi başka poi'ler ağaç değil.
+- **Koridorlar** (`planner.orchard_grid`): ağaç koordinatları sıra yönüne
+  izdüşürülüp kümeleniyor; koridor iki komşu sıranın tam ortasında, `outer`
+  ile en dış sıraların da dışında (kenar ağaçları dört yönden görülsün diye).
+  `directions: both` aynısını dik yönde de yapıyor. Sıra yönü verilmezse
+  ağaçlardan bulunuyor: dış zarfın dikdörtgeni ilk tahmin, sonra ±10°
+  içinde ağaçların en iyi hizalandığı açı (yarım metre kaymış tek bir ağaç
+  zarfı bir derece eğiyor; 100 m'lik koridorda bu 1,7 m).
+- **Kit ister** (`requires: gnss_rtk, cam360`): kit yoksa, eksikse ya da robot
+  henüz kitin GPS'inde değilse başlatılmıyor. Kitte kamera kontrolü
+  (`cam360_ctrl`) varsa runner kaydı görev sürüşe geçince başlatıyor, DONE /
+  FAILED / abort'ta durduruyor; arada duraklama ve şarj dönüşü boyunca kayıt
+  sürüyor (tek dosya). Kamera kendiliğinden durursa (ısınma, kart dolu) görev
+  duraklıyor ve kamera, insan devam diyene kadar yeniden başlatılmıyor.
+- ⚠️⚠️ **Ölçülen (`test_orchard_stack.py`): RTK'da bile odom'a çapalı satır
+  eğri gidiyor.** 16 m'lik koridorların sonu çizgiden **0,8–1 m** sapıyordu.
+  Sebep konum değil yön: satır `odom`'da açık çevrim sürülüyor ve `map→odom`'un
+  yaw'ı pusuladan geliyor; simde ~3° hata var (manyetometre kalıntısı + UTM
+  grid yakınsaması ~1,3°, karar 4). Hiçbir konum düzeltmesi açık çevrim bir
+  satırın içine giremez. **Düzeltme:** kitin GPS'i **RTK fixed** iken hassas
+  bacaklar doğrudan `map`'te sürülüyor (`rtk_rows_in_map`, varsayılan açık;
+  `map` artık gezinmiyor). Ölçülen: koridordan sapma p95 **0,095 m** (en kötü
+  0,24, dönüşlerde), 6 ağacın hepsi dört yönden geçildi, hiç temas yok.
+  Bu biçme için de geçerli: RTK fixed varken kaplama satırları da `map`'te.
+- ⚠️ **Aynı yön hatası NEO-6M ile biçmede de var ve açık:** "chain" çapası
+  deseni ilk waypoint'ten pusula yönüyle ölü hesapla kuruyor; 3° hata 20 m'lik
+  satırda ~1 m. Mevcut kaplama testlerinin 4 m'lik çiminde bu ~0,2 m'ye
+  düşüyor, o yüzden görünmedi. Gerçek bir pusula kalibrasyonunun ne kadar
+  yaklaştırdığı sahada ölçülecek (`mag-calibration.md`).
+- Kamera senkronu için ayrı bir "yalpalama" manevrası yok: grid taramada her
+  koridor sonunda yerinde 90–180° dönüşler var, jiroskop ile IMU arasındaki
+  ortak işaret için yeterince güçlü.
+
 ## Bilinen açıklar
 - ✅ ~~İstasyon iki yerde~~ — **3b'de kapandı** (aşağıda).
 - Survey edilmemiş engel hâlâ görünmez (menzil sensörü yok, karar 8).
+- Pusula yön hatası odom'a çapalı uzun satırları eğiyor (yukarıda,
+  `orchard_grid`); RTK fixed'da kapalı, NEO-6M'de açık.

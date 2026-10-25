@@ -706,9 +706,10 @@ class SiteKitNav2Stack(SiteNav2Stack):
     """SiteNav2Stack with the kit socket on, KitStack's way: missions on a site
     with a (fake) orchadOS kit plugged in or pulled out mid-mission."""
 
-    def __init__(self, workdir, features, *sim_args, ntrip_file=""):
+    def __init__(self, workdir, features, *sim_args, ntrip_file="", camera_shim=""):
         self.kit_dir = os.path.join(workdir, "kit")
         self.ntrip_file = ntrip_file or os.path.join(workdir, "no-ntrip.yaml")
+        self.camera_shim = camera_shim
         from robot_kit.hw import write_fake
         write_fake(self.kit_dir, False, None)
         super().__init__(workdir, features, "-r", "gps/fix:=gps/neo6m/fix",
@@ -718,7 +719,8 @@ class SiteKitNav2Stack(SiteNav2Stack):
 
     def launch_args(self):
         return (*super().launch_args(), "use_kit:=true", f"kit_fake_dir:={self.kit_dir}",
-                f"kit_gnss_port:={KitStack.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}")
+                f"kit_gnss_port:={KitStack.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}",
+                *((f"kit_camera_shim:={self.camera_shim}",) if self.camera_shim else ()))
 
 
 @pytest.fixture

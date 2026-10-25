@@ -30,6 +30,8 @@ from shapely.geometry import Point, Polygon
 from robot_missions import planner
 from robot_missions.planner import Plan, PlanError
 from robot_missions.site import LatLon, Site, SiteError, offset
+
+TREE_LABEL = "ağaç"            # site.POI_LABELS: what orchadOS's inventory exports
 from robot_missions.site_map import (
     HEADING_BASELINE_M, STATION_BODY_OFFSET, STATION_BODY_RADIUS, Converter,
     NotReady, assemble, positions_to_convert)
@@ -114,6 +116,8 @@ class Inputs:
     area: Optional[Polygon] = None
     points: Tuple[XY, ...] = ()         # route / goto
     heading: Optional[float] = None     # rad in map, from a compass param
+    # The area's trees (poi "ağaç" with a radius), in `map`: (x, y, radius).
+    trees: Tuple[Tuple[float, float, float], ...] = ()
 
 
 # --- the registry ------------------------------------------------------------
@@ -122,6 +126,12 @@ def _plan_coverage(inputs: Inputs, p, robot: RobotSpec, start) -> Plan:
     spacing = robot.cut_width * (1.0 - p["overlap"])
     return planner.coverage(inputs.region, spacing, angle=inputs.heading, start=start,
                             perimeter_pass=p["perimeter_pass"])
+
+
+def _plan_orchard_grid(inputs: Inputs, p, robot: RobotSpec, start) -> Plan:
+    return planner.orchard_grid(inputs.region, [(x, y) for x, y, _r in inputs.trees],
+                                angle=inputs.heading, directions=p["directions"],
+                                outer=p["outer"], start=start)
 
 
 def _plan_patrol(inputs: Inputs, p, robot: RobotSpec, start) -> Plan:
@@ -154,6 +164,17 @@ TASK_TYPES: Dict[str, TaskType] = {t.name: t for t in (
         "boundary_margin": Param(None, float, 0.0, 50.0, optional=True),
         "perimeter_pass": Param(True, bool),
     }, _plan_coverage, "Alanı şerit şerit biç"),
+    # The orchadOS grid scan with the kit (docs/kit-soketi.md): corridors
+    # between the tree rows, both ways, the 360° camera recording.
+    TaskType("orchard_grid", "area", {
+        # Compass bearing of the tree rows; None = from the trees themselves.
+        "angle_deg": Param(None, float, 0.0, 360.0, optional=True),
+        "directions": Param("both", str, choices=("both", "one")),
+        # Also outside the outermost rows, so edge trees are seen from 4 sides.
+        "outer": Param(True, bool),
+        # The robot's centre stays this far inside the area; None = robot_radius.
+        "boundary_margin": Param(None, float, 0.0, 50.0, optional=True),
+    }, _plan_orchard_grid, "Bahçeyi kitle tara (grid)", requires=("gnss_rtk", "cam360")),
     TaskType("patrol", "area", {
         "mode": Param("perimeter", str, choices=("perimeter", "random")),
         "laps": Param(1, int, 0, 10000),             # 0 = until stopped
@@ -260,7 +281,7 @@ def plan_from_answer(site: Site, mission: Mission, answer: Sequence[XY],
         heading = _heading(own) if p.get("angle_deg") is not None else None
         margin = p["boundary_margin"]
         if margin is None:
-            margin = robot.cut_width / 2.0
+            margin = robot.robot_radius if task.name == "orchard_grid" else robot.cut_width / 2.0
         obstacles = [Polygon(r[0], r[1:]) for r in (*geometry.keepouts,
                                                      *geometry.obstacle_polygons)]
         obstacles += [Point(c.x, c.y).buffer(c.radius)
@@ -268,7 +289,11 @@ def plan_from_answer(site: Site, mission: Mission, answer: Sequence[XY],
         obstacles += [Point(x, y).buffer(r) for x, y, r in extra_obstacles]
         region = planner.free_region(area, obstacles, margin,
                                      robot.robot_radius + robot.obstacle_margin)
-        inputs = Inputs(region=region, area=area, heading=heading)
+        tree_names = {poi.name for poi in site.pois
+                      if poi.label == TREE_LABEL and poi.radius_m is not None}
+        trees = tuple((c.x, c.y, c.radius) for c, o in zip(geometry.circles, site.circle_obstacles)
+                      if o.name in tree_names and area.contains(Point(c.x, c.y)))
+        inputs = Inputs(region=region, area=area, heading=heading, trees=trees)
     elif task.on == "route":
         inputs = Inputs(points=tuple(own))
     else:

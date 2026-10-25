@@ -63,3 +63,32 @@ def lost(before: Optional[dict], after: Optional[dict], requires: Sequence[str])
         if why is not None:
             return why
     return None
+
+
+# While the mission is in one of these, a scan's camera records.
+RECORDING_STATES = ("RUNNING", "WAITING_DOCK", "PAUSED")
+# A camera that was told to record and still is not after this long has failed.
+START_GRACE_S = 5.0
+
+
+def wants_recording(requires: Sequence[str], kit: Optional[dict], mission_state: str) -> bool:
+    """A scan records from the moment it drives until it is DONE, FAILED or
+    aborted — through pauses and dock trips too: one file per scan, and a
+    camera started and stopped at every pause would lose the seconds around
+    each restart. Only the robot's to start when the kit has camera control
+    (cam360_ctrl); otherwise a person started it by hand."""
+    if "cam360" not in requires or kit is None or not kit.get("kit"):
+        return False
+    return "cam360_ctrl" in kit["kit"].get("caps", ()) and mission_state in RECORDING_STATES
+
+
+def camera_failed(asked_at: Optional[float], camera: Optional[dict], now: float) -> Optional[str]:
+    """Why the camera, asked to record at `asked_at`, is not recording — or None."""
+    if asked_at is None or now - asked_at < START_GRACE_S:
+        return None
+    if camera is None or not camera.get("connected"):
+        return "the 360° camera is not connected"
+    if not camera.get("recording"):
+        fault = camera.get("fault")
+        return f"the 360° camera stopped recording ({fault or 'no reason given'})"
+    return None

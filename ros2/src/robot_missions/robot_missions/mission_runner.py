@@ -63,7 +63,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile
 from rclpy.time import Time
 from robot_localization.srv import FromLLArray, ToLL
 from std_msgs.msg import String
-from std_srvs.srv import Trigger
+from std_srvs.srv import SetBool, Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from robot_missions import kit_gate
@@ -119,6 +119,10 @@ class MissionRunner(Node):
         self.declare_parameter("join_tolerance_m", 0.3)
         # "chain" or "leg" — see _target.
         self.declare_parameter("anchor", "chain")
+        # On the kit's RTK (fixed), rows are driven in `map` itself: `map`
+        # no longer wanders, and an odom-anchored row inherits the compass's
+        # heading error for its whole length (_row_frame).
+        self.declare_parameter("rtk_rows_in_map", True)
 
         p = self.get_parameter
         self._robot = RobotSpec(cut_width=p("cut_width").value,
@@ -137,6 +141,7 @@ class MissionRunner(Node):
         self._planned_with_start = False
         self._handles: Dict[int, Any] = {}
         self._leg = None                # (token, deadline) — _check_leg_deadline
+        self._frame = None              # the frame rows are driven in (_row_frame)
         # index -> the waypoint's target in `odom` ("chain" anchoring); emptied
         # whenever the mission stops running or is re-planned (re-anchor).
         self._targets: Dict[int, Any] = {}
@@ -169,6 +174,15 @@ class MissionRunner(Node):
         # socket: kit missions are refused, the rest is untouched (kit_gate.py).
         self._kit = None
         self.create_subscription(String, "kit/state", self._on_kit, latched)
+        # A scan's 360° camera (kit_camera): recording while the scan runs.
+        self._camera = None
+        self._recording_asked = None        # when record(true) was accepted
+        self._record_pending = False
+        # After the camera quit, it is not restarted until a person resumes:
+        # an overheated camera asked again at once would quit again.
+        self._camera_hold = False
+        self._record = self.create_client(SetBool, "kit_camera/record")
+        self.create_subscription(String, "kit/camera/status", self._on_camera, 10)
         self.create_service(StartMission, "~/start", self._on_start)
         self.create_service(Trigger, "~/pause", self._command(self._policy.pause))
         self.create_service(Trigger, "~/resume", self._on_resume)
@@ -223,6 +237,8 @@ class MissionRunner(Node):
             response.success, response.message = False, why
             return response
         response.success, response.message, actions = self._policy.resume()
+        if response.success:
+            self._camera_hold = False
         self._run(actions)
         return response
 
@@ -235,8 +251,49 @@ class MissionRunner(Node):
         if self._policy.state not in (State.RUNNING, State.WAITING_DOCK):
             return
         why = kit_gate.lost(before, kit, self._requires())
-        if why is None:
+        if why is not None:
+            self._pause_for(why)
+
+    def _on_camera(self, message: String) -> None:
+        try:
+            self._camera = json.loads(message.data)
+        except ValueError:
             return
+
+    def _manage_camera(self) -> None:
+        """Start the scan's camera when it starts driving, stop it at the end,
+        and pause the scan if the camera quits (too hot, card full): a scan
+        without video is worth nothing to orchadOS, however well it drove."""
+        want = (kit_gate.wants_recording(self._requires(), self._kit, self._policy.state.value)
+                and not self._camera_hold)
+        recording = self._recording_asked is not None
+        if want != recording and not self._record_pending:
+            if not self._record.service_is_ready():
+                return
+            self._record_pending = True
+            future = self._record.call_async(SetBool.Request(data=want))
+
+            def done(f, want=want):
+                self._record_pending = False
+                result = f.result()
+                if result is not None and result.success:
+                    self._recording_asked = self._now() if want else None
+                    self.get_logger().info(f"360° camera: {result.message}")
+                else:
+                    why = result.message if result is not None else "no answer"
+                    self.get_logger().warn(f"360° camera refused ({why})")
+                    if want and self._policy.state == State.RUNNING:
+                        self._pause_for(f"the 360° camera would not record: {why}")
+            future.add_done_callback(done)
+            return
+        if want and self._policy.state == State.RUNNING:
+            why = kit_gate.camera_failed(self._recording_asked, self._camera, self._now())
+            if why is not None:
+                self._recording_asked = None
+                self._camera_hold = True
+                self._pause_for(why)
+
+    def _pause_for(self, why: str) -> None:
         self.get_logger().warn(f"pausing the mission: {why}")
         self._targets = {}
         self._cutting = False
@@ -279,6 +336,7 @@ class MissionRunner(Node):
     def _tick(self) -> None:
         self._run(self._policy.tick(self._now()))
         self._check_leg_deadline()
+        self._manage_camera()
 
     def _start_leg_clock(self, token: int, length_m: float) -> None:
         """Every waypoint gets a time budget: 60 s plus 10 s per metre between
@@ -457,6 +515,11 @@ class MissionRunner(Node):
             return
         if not backed_off and self._back_off(action, waited):
             return
+        frame = self._row_frame()
+        if frame != self._frame:
+            if self._frame is not None:
+                self.get_logger().info(f"rows now driven in {frame}")
+            self._frame, self._targets = frame, {}
         target = self._target(index)
         if target is None:
             self._run(self._policy.goal_result(action.token, Result.ABORTED, self._now()))
@@ -465,7 +528,7 @@ class MissionRunner(Node):
         here = self._robot_xy()
         self.get_logger().info(
             f"waypoint {index}/{len(plan.waypoints)} {'row' if waypoint.work else 'transit'} "
-            f"to map ({waypoint.x:.2f}, {waypoint.y:.2f}) = odom ({target[0]:.2f}, "
+            f"to map ({waypoint.x:.2f}, {waypoint.y:.2f}) = {self._frame} ({target[0]:.2f}, "
             f"{target[1]:.2f}); robot at map "
             + (f"({here[0]:.2f}, {here[1]:.2f})" if here else "?"))
         if waypoint.work and index > 0:
@@ -610,7 +673,7 @@ class MissionRunner(Node):
         goal checker stopped (up to 1 m off: 0.77 m of cutting outside the
         lawn, measured, before the join). Within join_tolerance_m: nothing."""
         self._cutting = False
-        here = self._robot_in(self.get_parameter("odom_frame").value)
+        here = self._robot_in(self._frame)
         if here is None:
             self._run(self._policy.goal_result(token, Result.ABORTED, self._now()))
             return
@@ -620,7 +683,7 @@ class MissionRunner(Node):
             return
 
         def join():
-            now = self._robot_in(self.get_parameter("odom_frame").value)
+            now = self._robot_in(self._frame)
             if now is None:
                 self._run(self._policy.goal_result(token, Result.ABORTED, self._now()))
                 return
@@ -640,6 +703,21 @@ class MissionRunner(Node):
         odom = self.get_parameter("odom_frame").value
         return (self._tf.can_transform(odom, "map", Time())
                 and self._tf.can_transform(odom, "base_link", Time()))
+
+    def _row_frame(self) -> str:
+        """Where precise legs are driven. `odom` by default (mission_runner's
+        docstring: `map` wanders with the NEO-6M). With the kit on RTK fixed,
+        `map` itself: it holds to centimetres, and MEASURED
+        (test_orchard_stack, 2026-10-26), odom-anchored 16 m corridors on RTK
+        came out 0.8-1 m off their line at the far end — the compass's ~3°
+        heading error (sim mag residual + UTM grid convergence), which no
+        position fix can correct inside an open-loop odom row."""
+        kit = self._kit or {}
+        rtk = (kit.get("gps_source") == "kit"
+               and (kit.get("gnss") or {}).get("solution") == "rtk_fixed")
+        if rtk and self.get_parameter("rtk_rows_in_map").value:
+            return "map"
+        return self.get_parameter("odom_frame").value
 
     def _map_to_odom(self):
         """(tx, ty, yaw) of map -> odom right now, or None."""
@@ -667,12 +745,15 @@ class MissionRunner(Node):
         "leg": every waypoint through a fresh map->odom, position included:
         the pattern follows the GPS, and every wander lands between two rows.
         """
+        waypoint = self._plan.waypoints[index]
+        if self._frame == "map":
+            self._targets[index] = (waypoint.x, waypoint.y)
+            return self._targets[index]
         tf = self._map_to_odom()
         if tf is None:
             return None
         tx, ty, yaw = tf
         c, s_ = math.cos(yaw), math.sin(yaw)
-        waypoint = self._plan.waypoints[index]
         previous = self._targets.get(index - 1)
         if self.get_parameter("anchor").value == "chain" and previous is not None \
                 and not fresh:
@@ -686,7 +767,7 @@ class MissionRunner(Node):
         return target
 
     def _send_line(self, token: int, start, end, then=None) -> None:
-        frame = self.get_parameter("odom_frame").value
+        frame = self._frame or self.get_parameter("odom_frame").value
         (x0, y0), (x1, y1) = start, end
         heading = math.atan2(y1 - y0, x1 - x0)
         length = math.hypot(x1 - x0, y1 - y0)
