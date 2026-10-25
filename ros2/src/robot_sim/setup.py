@@ -26,6 +26,7 @@ setup(
             "edge_expert = robot_sim.edge_expert_node:main",
             "edge_batch = robot_sim.edge_batch:main",
             "policy_eval = robot_sim.policy_eval:main",
+            "dagger_batch = robot_sim.dagger_batch:main",
         ],
     },
 )
