@@ -80,8 +80,7 @@ class KitManager(Node):
         self._tf = StaticTransformBroadcaster(self)
         self.create_subscription(NavSatFix, "kit/gnss/fix", self._on_fix, 10)
         self.create_subscription(String, "kit/gnss/status", self._on_gnss_status, 10)
-        self.create_subscription(String, "kit/camera/status",
-                                 lambda _m: self._monitor.seen("camera", self._now()), 10)
+        self.create_subscription(String, "kit/camera/status", self._on_camera, 10)
         self.create_subscription(PointCloud2, "kit/lidar/points",
                                  lambda _m: self._monitor.seen("lidar", self._now()),
                                  qos_profile_sensor_data)
@@ -98,6 +97,15 @@ class KitManager(Node):
     def _on_fix(self, msg: NavSatFix) -> None:
         if msg.status.status != NavSatStatus.STATUS_NO_FIX:
             self._monitor.seen("gnss", self._now())
+
+    def _on_camera(self, msg: String) -> None:
+        # kit_camera publishes while disconnected too (with the reason): only a
+        # connected camera is a camera that works.
+        try:
+            if json.loads(msg.data).get("connected"):
+                self._monitor.seen("camera", self._now())
+        except (ValueError, AttributeError):
+            pass
 
     def _on_gnss_status(self, msg: String) -> None:
         try:

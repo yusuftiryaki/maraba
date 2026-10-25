@@ -373,6 +373,27 @@ TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
   boş çip kit sayılmıyor; robot F9P'ye hiç CFG yazmıyor (sahte alıcı sayıyor).
 - ⚠️ Bu sayılar sahte bir F9P'nin "iyi gün" gürültüsü. Ağaç altında RTK'nın ne
   yaptığı bir saha ölçümü (K3).
+- **Görevler** (`robot_missions/kit_gate.py`): görev tipleri `requires` ile kit
+  isteyebiliyor (bahçe taraması K2'de). Kit yoksa, eksikse ya da robot henüz
+  kitin GPS'ine geçmediyse görev **başlatılmıyor** (resume de). Robot kitin
+  GPS'iyle konumlanırken fiş çıkarsa ya da kitin GPS'i susarsa çalışan görev
+  **duraklıyor**, robot duruyor, GPS robot durunca NEO-6M'e dönüyor; devam
+  kararı insanın. Ölçülen (`test_mission_kit.py`): fiş → PAUSED 0,69 sn
+  (0,5 sn'si debounce), → robot durdu 0,88 sn.
+- **Web:** başlıkta kit rozeti (seri no, RTK durumu ve hAcc, GPS kaynağı; üstüne
+  gelince donanım, eksik veri, NTRIP). Görev formu "Kit gerekir" diyor.
+- **360° kamera** (`camera.py`, `kit_camera`): SDK repoya girmediği için robot
+  kamerayla ayrı bir **shim** programı üzerinden JSON satırlarıyla konuşuyor;
+  SDK'daki bir çökme ROS düğümünü düşürmüyor ve SDK'sız robot da derleniyor.
+  `kit_camera` bağlanınca kameranın saatini robotun saatinden ayarlıyor,
+  kayıt sürerken (robot ms, kamera media time) çiftlerini `time_log`'a yazıyor
+  (robotta QR adımının yerine). Kamera kendi şikâyetlerini (ısınma, kart dolu,
+  kayıt durdu) `fault`'ta tutuyor. `fake_camera_shim` aynı protokolü sahte bir
+  kamerayla konuşuyor (ısınıp duruyor, kartı doluyor).
+  ⚠️ **Gerçek shim (C++, SDK'ya bağlı) yazılmadı:** SDK'nın başlık dosyaları bu
+  makinede yok. Elindeki SDK paketi container'a bağlanınca (`~/repos`) yazılıp
+  derlenecek. O zamana kadar `cam360_ctrl`'lü bir kit robotta DEGRADED kalır
+  (kamera sessiz) ve kamera isteyen görevler reddedilir — kayıtsız tarama yerine.
 
 ## Açık kalanlar
 

@@ -190,3 +190,38 @@ def test_a_blank_chip_is_not_a_kit(kit_stack, probe):
     probe.spin_for(3.0)
     assert probe.state["state"] == "NONE" and "blank" in probe.state["error"]
     assert probe.state["gps_source"] == "neo6m"
+
+
+def test_a_kit_with_camera_control_is_ready_once_the_camera_answers(kit_stack, probe):
+    """v1 with cam360_ctrl: kit_camera starts the (fake) SDK shim, sets the
+    camera's clock and records on request; without a shim the same kit would
+    stay DEGRADED (camera silent) and scan missions would be refused."""
+    from std_srvs.srv import SetBool
+
+    stack = kit_stack(camera_shim=stack_camera())
+    probe.wait_until(lambda: probe.state is not None, 40.0, "kit/state")
+    camera = {}
+    probe.create_subscription(String, "/kit/camera/status",
+                              lambda m: camera.update(json.loads(m.data)), 10)
+    plug(stack, "v1")
+    probe.wait_until(lambda: camera.get("connected"), 20.0, "the camera connected")
+    probe.spin_for(16.0)                       # past kit_manager's grace period
+    assert probe.state["state"] == "READY", probe.state
+    record = probe.create_client(SetBool, "/kit_camera/record")
+    assert record.wait_for_service(timeout_sec=5.0)
+
+    def call(on):
+        future = record.call_async(SetBool.Request(data=on))
+        while not future.done():
+            rclpy.spin_once(probe, timeout_sec=0.05)
+        return future.result()
+
+    assert call(True).success
+    probe.wait_until(lambda: camera.get("recording"), 5.0, "recording")
+    stopped = call(False)
+    assert stopped.success and ".insv" in stopped.message
+
+
+def stack_camera():
+    from conftest import KitStack
+    return KitStack.FAKE_CAMERA

@@ -200,7 +200,7 @@ STACK_PATTERNS = (
     # the kit socket: an orphan selector would publish a second /gps/fix, an
     # orphan kit_manager a stale latched kit/state
     "lib/robot_kit/kit_manager", "lib/robot_kit/kit_gnss", "lib/robot_kit/gps_selector",
-    "lib/robot_kit/ntrip_client",
+    "lib/robot_kit/ntrip_client", "lib/robot_kit/kit_camera", "lib/robot_kit/fake_camera_shim",
 )
 
 
@@ -409,9 +409,12 @@ class KitStack(GlobalStack):
 
     GNSS_LINK = "/tmp/fake_kit_gnss_test"
 
-    def __init__(self, workdir, *sim_args, ntrip_file=""):
+    FAKE_CAMERA = "ros2 run robot_kit fake_camera_shim"
+
+    def __init__(self, workdir, *sim_args, ntrip_file="", camera_shim=""):
         self.kit_dir = os.path.join(workdir, "kit")
         self.ntrip_file = ntrip_file or os.path.join(workdir, "no-ntrip.yaml")
+        self.camera_shim = camera_shim
         from robot_kit.hw import write_fake
         write_fake(self.kit_dir, False, None)
         super().__init__("--ros-args", "-r", "gps/fix:=gps/neo6m/fix",
@@ -421,7 +424,9 @@ class KitStack(GlobalStack):
 
     def launch_args(self):
         return (*super().launch_args(), "use_kit:=true", f"kit_fake_dir:={self.kit_dir}",
-                f"kit_gnss_port:={self.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}")
+                f"kit_gnss_port:={self.GNSS_LINK}", f"ntrip_file:={self.ntrip_file}",
+                # ⚠️ only when set: `name:=` with nothing after it is a launch error
+                *((f"kit_camera_shim:={self.camera_shim}",) if self.camera_shim else ()))
 
 
 @pytest.fixture

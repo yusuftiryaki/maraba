@@ -1,4 +1,5 @@
-"""The kit socket (docs/kit-soketi.md): kit_manager, kit_gnss, gps_selector, ntrip_client.
+"""The kit socket (docs/kit-soketi.md): kit_manager, kit_gnss, gps_selector,
+ntrip_client, kit_camera.
 
 Included by robot.launch.py with use_kit:=true. Nothing here is on the motor
 command path: speed limits, the watchdog and the deadman do not change with
@@ -25,6 +26,7 @@ def generate_launch_description():
     fake_dir = LaunchConfiguration("kit_fake_dir")
     gnss_port = LaunchConfiguration("kit_gnss_port")
     ntrip_file = LaunchConfiguration("ntrip_file")
+    camera_shim = LaunchConfiguration("kit_camera_shim")
 
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="false"),
@@ -33,6 +35,9 @@ def generate_launch_description():
         DeclareLaunchArgument("kit_gnss_port", default_value="/dev/kit_gnss"),
         DeclareLaunchArgument("ntrip_file",
                               default_value=os.path.expanduser("~/.robot/ntrip.yaml")),
+        # The Camera SDK shim (robot_kit/camera.py). Empty: ~/.robot/sdk/kit_camera_shim
+        # if it exists; the fake: "ros2 run robot_kit fake_camera_shim".
+        DeclareLaunchArgument("kit_camera_shim", default_value=""),
 
         Node(
             package="robot_kit", executable="kit_manager", name="kit_manager",
@@ -49,6 +54,11 @@ def generate_launch_description():
             package="robot_kit", executable="gps_selector", name="gps_selector",
             output="screen", parameters=[{"use_sim_time": use_sim_time}],
             respawn=True, respawn_delay=1.0,
+        ),
+        Node(
+            package="robot_kit", executable="kit_camera", name="kit_camera", output="screen",
+            parameters=[{"shim_command": camera_shim, "use_sim_time": use_sim_time}],
+            respawn=True, respawn_delay=2.0,
         ),
         Node(
             package="robot_kit", executable="ntrip_client", name="ntrip_client",

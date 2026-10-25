@@ -24,6 +24,8 @@ setup(
             "gps_selector = robot_kit.gps_selector_node:main",
             "ntrip_client = robot_kit.ntrip_client_node:main",
             "fake_kit = robot_kit.fake_kit:main",
+            "kit_camera = robot_kit.kit_camera_node:main",
+            "fake_camera_shim = robot_kit.fake_camera_shim:main",
         ],
     },
 )
