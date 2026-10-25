@@ -751,8 +751,11 @@ Alanlar hem **masada haritadan çizilecek** hem **öğret-kaydet** ile kaydedile
       (18 uzman + 20 DAgger, 10k adım): 6 koşunun 5'inde ~1.6–2 tur, saha 21
       çözüldü, hiç dışarı yok; **20 cw hâlâ takılıyor**. Checkpoint
       `~/.robot/policies/act_dagger2` (Kaggle `hoverbot-edge-train-dagger2`).
-    - **Sıradaki:** DAgger 3. tur (act_dagger2 ile topla); ikinci kamera deneyi
-      (kamera alımına o karar versin); Pi 4'te çıkarım süresi. Donanım
+    - ✅ 6e ikinci kamera deneyi (aşağı bakan 110°, Pi Kamerası'nın yerine,
+      aynı veri/adım): belirgin kazanç yok (saha 21'i DAgger'sız çözdü, 20'de
+      kötü, hata daha iyi değil). **Öneri: şimdi alma**, gerçek bölümlerden
+      sonra yeniden bak. DAgger 3. tur toplandı, eğitilmedi (gerek yok).
+    - **Sıradaki:** Pi 4'te çıkarım süresi (donanım gelince). Donanım
       tarafında B1 (flash) hâlâ darboğaz.
   - Sahada ilk kullanım için `robot.service`'e `site_file:=` eklenmeli
     (deployment.md adım 8).

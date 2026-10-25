@@ -492,6 +492,42 @@ politikanın üstünde), 2 s ileri sürünce bırakır; bölüm kipi `interventi
   değişimi/dk) — her yapılandırma tek koşu, gürültü payı büyük. DAgger'ın
   olağan yolu: bir sonraki tur bu politikayla toplanır (o hâlâ takıldığı
   durumları ziyaret eder).
+  3. tur toplandı (`~/.robot/sim_episodes_dagger3`, sahalar 111–120, 20/20
+  tur tamam) ama eğitilip değerlendirilmedi: amaç boru hattıydı, model
+  cilalamak değil (kullanıcı, 2026-10-25).
+
+### 6e ✅: ikinci kamera deneyi — aşağı bakan geniş açı (2026-10-25)
+Soru: kenar takibi için ikinci, aşağı bakan geniş açılı bir kamera almaya
+değer mi? Hafif tutuldu: aday kamera Pi Kamerası'nın YERİNE (ikisi birden
+değil), geri kalan her şey aynı.
+- Aday (`robot.urdf.xacro` `edge_camera_link`, alınmadı): önde, 40 cm
+  yükseklikte, **50° aşağı**, 110° yatay açı (sim'de iğne deliği; gerçeği
+  balık gözü olur). `sim_node camera_frame:=edge_camera_optical_link
+  camera_hfov:=1.92`; `edge_batch`/`policy_eval --camera edge`. Yanaşma
+  hep Pi Kamerası'nı kullanır. Görüntüde Pi Kamerası'nın üst yarısı gök,
+  kenar uzakta ince bir çizgi; adayda çim/toprak sınırı karenin çoğu.
+- Aynı 9 saha × 2 yön uzman bölümü, aynı GPS, aynı 5 000 adım, DAgger yok —
+  karşılaştırma 6d-4'ün Pi Kameralı politikası. 150 s'de tur / ort. hata:
+
+| saha | yön | Pi Kamerası | aday kamera |
+|---|---|---|---|
+| 20 | ccw | %182 / 4.8 cm | %77 / 8.0 cm |
+| 20 | cw | %164 / 7.7 cm | %24 / 17.3 cm |
+| 21 | ccw | dışarı | **%200** / 6.1 cm |
+| 21 | cw | dışarı | **%189** / 4.3 cm |
+| 22 | ccw | %192 / 3.6 cm | %212 / 5.7 cm |
+| 22 | cw | %169 / 4.6 cm | %197 / 6.1 cm |
+
+- **Sonuç: belirgin bir kazanç yok.** Aday, saha 21'i DAgger'sız çözüyor
+  (kenarı yakında görüyor) ve 21/22'de biraz hızlı; ama 20'de belirgin kötü
+  ve ortalama hatası Pi Kamerası'ndan **iyi değil** (yakın görüşten beklenen
+  buydu). Her hücre tek koşu; gürültü payı farklar kadar büyük. DAgger (6d-5)
+  saha 21'i Pi Kamerası'yla zaten çözdü.
+- **Karar önerisi:** kenar takibi için ikinci kamerayı **şimdi alma**. Asıl
+  sınır sim değil gerçek veri (gerçek çim, ışık, balık gözü bozulması); ilk
+  gerçek bölümlere bakınca yeniden değerlendir. İkisi birden (iki görüntü
+  girişli politika) ayrı bir altyapı işi — kayıt/dışa aktarma/dönüştürme/
+  `policy_node` tek kamera varsayıyor.
 
 ## Sonra: politika robota nasıl takılır
 Algoritma seçilince (adaylar: ACT, Diffusion Policy — ikisi de kamera +

@@ -149,6 +149,12 @@ class SimNode(Node):
         self.declare_parameter("camera_rate_hz", 0.0)
         self.declare_parameter("camera_width", 320)
         self.declare_parameter("camera_height", 240)
+        # Which camera camera/image_raw shows (docs/learning.md 6e): the Pi
+        # Camera on the deck, or the CANDIDATE wide-angle edge camera
+        # (edge_camera_optical_link, hfov ~110 deg). Docking always uses the
+        # Pi Camera. 0 hfov = the Pi Camera V2's.
+        self.declare_parameter("camera_frame", "camera_optical_link")
+        self.declare_parameter("camera_hfov", 0.0)
         # Learning mode (docs/learning.md 6b): the lawns' edge on the camera —
         # a site file's areas are grass, the rest soil — and the palette seed
         # (domain randomization; 0 = default colours).
@@ -370,6 +376,7 @@ class SimNode(Node):
         self._tag_noise = p("dock_detection_noise_per_m").value
         self._tag_angle_noise = p("dock_detection_angle_noise").value
         self._camera: CameraMount | None = None
+        self._render_camera: CameraMount | None = None
         self._gps_offset: tuple[float, float] | None = None
 
         self._truth_pub = self.create_publisher(Odometry, "ground_truth", 10)
@@ -560,7 +567,7 @@ class SimNode(Node):
 
     def _publish_camera(self) -> None:
         from robot_sim.sim_camera import render   # numpy only when the camera is on
-        mount = self._camera_mount()
+        mount = self._rendered_mount()
         if mount is None:
             return
         p = self.get_parameter
@@ -573,7 +580,7 @@ class SimNode(Node):
                         (pose.x, pose.y, pose.yaw), solids, self._lawns(), self._colours())
         msg = Image()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "camera_optical_link"
+        msg.header.frame_id = p("camera_frame").value
         msg.height, msg.width = height, width
         msg.encoding = "rgb8"
         msg.step = width * 3
@@ -593,6 +600,22 @@ class SimNode(Node):
             from robot_sim.sim_camera import palette
             self._palette = palette(int(self.get_parameter("ground_seed").value))
         return self._palette
+
+    def _rendered_mount(self) -> CameraMount | None:
+        frame = self.get_parameter("camera_frame").value
+        if frame == "camera_optical_link":
+            return self._camera_mount()
+        if self._render_camera is None:
+            try:
+                tf = self._tf_buffer.lookup_transform("base_link", frame, Time())
+            except TransformException:
+                return None
+            t, q = tf.transform.translation, tf.transform.rotation
+            hfov = self.get_parameter("camera_hfov").value
+            self._render_camera = CameraMount(
+                translation=(t.x, t.y, t.z), rotation=matrix_from_quaternion(q.x, q.y, q.z, q.w),
+                **({"hfov": hfov} if hfov > 0.0 else {}))
+        return self._render_camera
 
     def _camera_mount(self) -> CameraMount | None:
         if self._camera is None:
