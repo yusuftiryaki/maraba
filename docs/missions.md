@@ -572,10 +572,12 @@ taşa dayanıp patinaj yapan tekerlek aynısını yapar.
    - **dönüş:** tekerlek yön hızı ile ham jiroskop ≥ 1 s boyunca 0.3 rad/s'den
      fazla ayrışırsa (ekf_local ikisini birden kaynaştırdığı için odom'un
      yönünü bozan tam bu). CI olayının kendisi; **1 s**'de yakalanır.
-   - **duraksama:** 10 s'lik pencerede tekerlekler > 1 m demiş ama ham GPS
-     (uçlarda 2 s ortalama, tekerlek mesafesi AYNI taban üzerinden) bunun
-     %25'inden az gitmişse, ≥ 2 s sürerse. Ham GPS bilerek: `/gps/filtered`
-     EKF'tir, denetlenen tekerlek odometrisini zaten içerir.
+   - **duraksama:** 3 s'lik pencerede tekerleklerin hız VEKTÖRÜ (odom
+     yönüyle) ortalaması ≥ 0.15 m/s iken GPS'in **Doppler hızı** (`gps/vel`,
+     NEO-6M VTG — `nmea_serial_driver`'ın `vel`'i) vektör ortalaması bunun
+     %35'inden azsa, ≥ 2 s sürerse. Ham alıcı bilerek: `/gps/filtered`
+     EKF'tir, denetlenen tekerlek odometrisini zaten içerir. Vektör ortalama:
+     pencere bir dönüşü kapsarsa iki taraf da aynı şekilde sıfıra iner.
    - **tepki:** bacak iptal, robot durur, odom zinciri `map`'ten yeniden
      başlar, bacak başarısız sayılır (tekrar, sonra atla). **İleri yönlü
      duraksama tamponun kaçırdığı bir temastır:** `site_map_server` onu
@@ -583,12 +585,19 @@ taşa dayanıp patinaj yapan tekerlek aynısını yapar.
      çekilir, şeritler etrafından kesilir. ⚠️ Bu olmadan (CI, 2026-10-24)
      runner bacakları taşa geri yolladı; robot dayalı kaldığı için yeni
      sıkışma olayı doğmadı, her bacak 90 s'lik bütçesini tüketti.
-   - **Ölçülen (sentetik, `test_jam.py`):** NEO-6M (1 m gürültü + 2 m
-     gezinme) altında 10 dk'lık dürüst şeritler × 10 tohum: **0 alarm**.
-     Bedeli: 1 m gürültüde gerçek bir duraksama **12–38 s**'de yakalanır
-     (uçların ortalaması ~0.45 m saçılır). İlk tasarım (6 s pencere, tüm
-     pencerenin tekerlek mesafesi — GPS tabanı ise 4 s'ydi) dürüst sürüşte
-     tohum başına 37–73 kez alarm verdi.
+   - **Ölçülen (sentetik, `test_jam.py` + 6.5 sa'lik tarama):** Doppler
+     gürültüsü 0.1 m/s/eksen (sim `gps_vel_noise_sigma`, datasheet), 4 m'lik
+     ileri-geri şeritler + yerinde dönüş + yay: **0 alarm**; gerçek duraksama
+     5 Hz'de **≤ 4.8 s**, fabrika 1 Hz'inde ≤ 9 s'de yakalanır; %30 patinaj
+     duraksama sayılmaz.
+     ⚠️ **İlk sürüm (#31) tekerlek mesafesini GPS KONUM yer değiştirmesiyle**
+     (10 s pencere, uçlarda 2 s ortalama) karşılaştırıyordu. Sentetik testteki
+     gezinme yavaş bir sinüstü; sim'in gerçek modeli (OU 2 m / 60 s) 8 s'de
+     eksen başına ~1 m kayar — robotun gittiği kadar. #33'ün CI'ında dürüst bir
+     şeritte alarm verdi (`wheels 2.00 m, GPS 0.23 m in 8 s`); OU ile ölçüldü:
+     pencere büyütmek kötüleştirdi (4 m şeritte pencere dönüşü kapsıyor). Doppler
+     hızı konumun gezinmesini taşımaz. Daha önceki ilk tasarım (6 s pencere,
+     tüm pencerenin tekerlek mesafesi) tohum başına 37–73 kez alarm vermişti.
    - Kabul (sim, `ci.sh mission`): `test_mission_jam.py` — şeridin üstünde,
      **tamponun görmediği** bir taş (`bumper_from_obstacles:=false`; tampon
      kenarının altında kalan taş, kök): ölçülen 2 sıkışma (tekerlek 2.1 m /

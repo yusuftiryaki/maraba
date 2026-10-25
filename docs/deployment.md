@@ -98,6 +98,14 @@ sudo usermod -aG dialout $USER   # relogin gerekir
 > fiziksel USB portuna göre (`KERNELS==`) ayır — ya da GPS'e farklı çipli
 > (FTDI) bir adaptör kullan. En temizi: baştan farklı çip.
 
+> **GPS hızı (sıkışma tespiti):** `jam_monitor`'ün duraksama denetimi GPS'in
+> Doppler hızına (`/gps/vel`, NEO-6M VTG cümlesi) dayanır. NEO-6M fabrikada
+> **1 Hz** gönderir: duraksama ≤ 9 s'de yakalanır. u-center ile
+> `UBX-CFG-RATE` → 200 ms (5 Hz) + `CFG-CFG` ile kaydet → ≤ 5 s. Doğrula:
+> `ros2 topic hz /gps/vel` ≈ 5 ve robot dururken `ros2 topic echo /gps/vel`
+> ≤ ~0.1 m/s. ⚠️ u-center'da "static hold" AÇIKSA düşük hızda hız 0'a
+> kilitlenir — 0.3 m/s'lik biçme hızında sahte duraksama demek; kapalı tut.
+
 ## Adım 5 — I2C (IMU + manyetometre) ve kamera
 
 ```bash

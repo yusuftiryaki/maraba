@@ -21,6 +21,7 @@ learning_topics:
     - /imu/data
     - /imu/mag
     - /gps/fix
+    - /gps/vel
     - /gps/filtered
     - /odom
     - /joint_states

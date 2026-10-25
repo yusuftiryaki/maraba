@@ -1402,12 +1402,14 @@ Artık repodalar.
 CI kaydında taşa dayanan robotun tekerlekleri döndü, odometri bozuldu,
 `mission_runner` alanın 3 m dışında biçti. Sim'in temas modeli düzeltildi
 (#28, #29); robot tarafında **`jam_monitor`** tekerleği jiroskop (dönüş, 1 s)
-ve ham GPS (duraksama, 10 s pencere) ile karşılaştırıyor, `mission_runner`
+ve GPS'in **Doppler hızı** (`/gps/vel`; duraksama, 3 s pencere — konum
+tabanlı ilk sürüm NEO-6M gezinmesinde yanlış alarm verdi, #33 CI) ile karşılaştırıyor, `mission_runner`
 sıkışmada bacağı durdurup odom zincirini `map`'ten yeniden kuruyor.
 Ölçülen (sim): yandan sıkışma yakalandı, taşma 0 m; sessiz ve NEO-6M kaplama
-koşularında **0 yanlış alarm**. Bedeli: 1 m GPS gürültüsünde duraksama
-12–38 s'de yakalanır. Ayrıntı: missions.md "Patinaj sonrası alan dışında
-biçme". Sahada eşikler (0.3 rad/s, %25) gerçek sensörlerle yeniden ölçülmeli.
+koşularında **0 yanlış alarm**; duraksama 5 Hz'de ≤ 5 s, NEO-6M'in fabrika
+1 Hz'inde ≤ 9 s'de yakalanır (5 Hz'e alma: deployment.md adım 4). Ayrıntı:
+missions.md "Patinaj sonrası alan dışında biçme". Sahada eşikler (0.3 rad/s,
+%35, Doppler gürültüsü) gerçek sensörlerle yeniden ölçülmeli.
 ⚠️ Kırılgan CI testi: `test_site_positions_land_where_the_gps_puts_them_all_the_way_round`
 bir kez 0.135 m (sınır 0.12) okudu; sınır, yakalaması gereken hatanın
 0.105–0.182 m aralığıyla örtüşüyor — gevşetilmedi.
