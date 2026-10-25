@@ -70,7 +70,22 @@ def test_no_expert_means_no_expert_episode(tmp_path):
 def test_the_default_state_never_includes_a_position():
     assert not any(n.startswith(("map.", "local.", "gps.")) for n in to_lerobot.DEFAULT_STATE)
     from robot_learning.dataset import STATE_NAMES
-    assert set(to_lerobot.DEFAULT_STATE) <= set(STATE_NAMES)
+    assert set(to_lerobot.DEFAULT_STATE) - set(to_lerobot.TASK_COLUMNS) <= set(STATE_NAMES)
+
+
+def test_the_edge_direction_comes_from_the_note():
+    ccw = {"note": json.dumps({"direction": "ccw", "seed": 3})}
+    assert to_lerobot.task_values(ccw, ("edge.dir",)) == [1.0]
+    assert to_lerobot.task_values({"note": '{"direction": "cw"}'}, ("edge.dir",)) == [-1.0]
+    assert to_lerobot.task_values({"note": ""}, ("edge.dir",)) is None, "no direction: skip"
+    assert to_lerobot.task_values({}, ()) == [], "no task columns asked: any episode"
+
+
+def test_task_columns_take_their_place_in_the_order():
+    sensed = np.array([[1.0, 2.0], [3.0, 4.0]], np.float32)
+    out = to_lerobot.assemble_state(("imu.ax", "edge.dir", "imu.ay"), ["imu.ax", "imu.ay"],
+                                    sensed, {"edge.dir": -1.0})
+    assert out.tolist() == [[1.0, -1.0, 2.0], [3.0, -1.0, 4.0]]
 
 
 def test_the_notebook_is_valid_json_and_pins_lerobot():

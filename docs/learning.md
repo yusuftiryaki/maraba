@@ -416,8 +416,37 @@ kez dönüş yönü değiştirdi.
   kararsız kalıyor ve ACT'nin 5 adımlık bloğu (0.5 s × 0.8 rad/s ≈ 23°)
   düzeltmeyi taşırıyor. Saha 21'de başta yanlış yöne gitti, alanın 1 m
   dışında **kapı kapattı ve durdurdu** — kapının gerçek bir politikaya karşı
-  ilk işi. İkisi de uzmanın hiç görmediği durumlar: 6d-4 (otomatik DAgger)
-  tam onlara etiket toplar.
+  ilk işi. İkisi de uzmanın hiç görmediği durumlar — ama önce bir sebep daha
+  çıktı (6d-4).
+
+### 6d-4 ✅: yön görevin parçası — `edge.dir` (2026-10-25)
+**Titremenin sebebi: politika hangi yöne gideceğini bilmiyordu.** 18 uzman
+bölümünün 9'u ccw (sınır sağda), 9'u cw; görev metni ikisinde aynı ve ACT
+görev metnini zaten kullanmıyor. Kenar boyunca giderken sınırın hangi yanda
+olduğu kareden okunur; ama köşede ya da başta kenara BAKARKEN tek kare "sağa
+mı sola mı" diyemez → sağa-sola titreme, bir sahada yanlış yöne gitme.
+- Durumda yeni sütun **`edge.dir`**: +1 ccw, −1 cw. Sensör değil, GÖREV:
+  `to_lerobot.py` bölümün notundan alır (`edge_batch` yazar; `episode_export`
+  artık notu `meta.json`'a taşıyor), `policy_node` `direction` parametresinden.
+  Notunda yön olmayan bölüm atlanır. `policy_eval --directions ccw,cw`.
+- **Sonuç** (aynı 18 bölüm, aynı 5 000 adım, 150 s):
+
+| saha | yön | tur | istenen hız | ort. hata | bantta | yerinde dönüş | yön değişimi/dk | dışarı |
+|---|---|---|---|---|---|---|---|---|
+| 20 | ccw | **%182** | 0.27 m/s | 4.8 cm | %83 | %8 | 0.8 | 0 |
+| 20 | cw | **%164** | 0.22 | 7.7 cm | %89 | %9 | 5.6 | 0 |
+| 21 | ccw | 0 | 0.24 | – | – | %0 | 0.4 | kapı, (2.9, 0.3) |
+| 21 | cw | 0 | 0.24 | – | – | %3 | 7.5 | kapı, (2.1, 4.5) |
+| 22 | ccw | **%192** | 0.25 | 3.6 cm | %94 | %11 | 1.6 | 0 |
+| 22 | cw | **%169** | 0.22 | 4.6 cm | %98 | %15 | 4.8 | 0 |
+
+  Önce (6d-3): tur %40–45, istenen hız 0.07–0.09, yön değişimi 27/dk. Artık
+  uzmanın hızında (0.27–0.28) ve 150 s'de ~1.7–1.9 tur. **Saha 21 ise iki
+  yönde de dışarı:** sahanın doğu kenarı başlangıçtan yalnız 2.1 m önde
+  (eğitim sahalarının neredeyse hepsinde ≥ 2.6 m) — politika düz gidip
+  dönmüyor, kapı 1 m dışarıda durduruyor. Az sahadan (16) öğrenilmiş bir
+  alışkanlık ("önce ~2.5 m düz git"); otomatik DAgger'ın ve daha çok sahanın
+  işi (6d-5).
 
 ## Sonra: politika robota nasıl takılır
 Algoritma seçilince (adaylar: ACT, Diffusion Policy — ikisi de kamera +
