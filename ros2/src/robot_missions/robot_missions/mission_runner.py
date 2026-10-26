@@ -684,7 +684,13 @@ class MissionRunner(Node):
         if not pieces:
             self._run(self._policy.goal_result(token, Result.SUCCEEDED, self._now()))
             return
-        in_odom = self._frame != "map"
+        # Only rows longer than a chunk are re-aimed. ⚠️ Re-aiming short rows
+        # too cost the rock lawn (4 m rows, split by the rock) 7-9 points of
+        # coverage in CI (77-78% -> 69%): the second piece, after the detour,
+        # was turned by whatever map->odom did DURING the detour.
+        limit = self.get_parameter("max_leg_m").value
+        in_odom = (self._frame != "map" and limit > 0.0
+                   and math.hypot(b_map.x - a_map.x, b_map.y - a_map.y) > limit)
         if yaw0 is None and in_odom:
             tf = self._map_to_odom()
             yaw0 = tf[2] if tf is not None else 0.0

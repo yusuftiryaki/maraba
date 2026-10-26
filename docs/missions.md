@@ -659,7 +659,7 @@ kadar kayık, çit payı 2–5 m olmak zorunda.
   misina açık devam ediyor (önce bir geçiş "join"i vardı; misina kapalı
   kaldığı için her parça arasında şerit kalıyordu: CI'da kaya çiminde %68,7,
   sıkışma çiminde 0,38 m taşma). Ölçülen (`test_mission_long_rows.py`, 18 m çim,
-  sessiz GPS, iki koşu): satır çizgisinden sapma p95 **0,86–1,26 m → 0,39–0,49 m**. Kalan: pusulanın
+  sessiz GPS, üç koşu): satır çizgisinden sapma p95 **0,86–1,26 m → 0,35–0,49 m**. Yalnız `max_leg_m`'den uzun satırlar yeniden yönleniyor: kısa satırlarda da yapınca kaya çimi (4 m satırlar) CI'da %77–78'den %69'a düştü — kayanın etrafından dolanırken map→odom'un dönüşü satırın ikinci parçasını çeviriyordu. Kalan: pusulanın
   kendi ±1°'si ve parça başına birkaç cm. Gerçek MPU6050'nin kayması sahada
   ölçülecek.
 - Kamera senkronu için ayrı bir "yalpalama" manevrası yok: grid taramada her
