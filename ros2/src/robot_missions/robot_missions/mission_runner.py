@@ -666,7 +666,7 @@ class MissionRunner(Node):
                 if (t1 - max(t0, t_here)) * length >= 0.3]
 
     def _cut_pieces(self, token: int, a_map, b_map, a_odom, b_odom, pieces,
-                    yaw0=None, index=None) -> None:
+                    yaw0=None, index=None, after=None) -> None:
         """Mow pieces[0], then the rest, each reached first with the trimmer
         off (_approach: never a slanted row from wherever the robot is).
 
@@ -711,13 +711,22 @@ class MissionRunner(Node):
         piece_start = SimpleNamespace(x=sx, y=sy, yaw=heading)
         start, end = lerp(a_odom, b_now, t0), lerp(a_odom, b_now, t1)
 
-        def cut():
+        def cut(line_start=start):
             self._cutting = True
             self._publish_status()
-            self._send_line(token, start, end,
+            self._send_line(token, line_start, end,
                             then=(lambda: self._cut_pieces(token, a_map, b_map, a_odom,
-                                                           b_odom, rest, yaw0, index))
+                                                           b_odom, rest, yaw0, index, t1))
                             if rest else None)
+        if after is not None and abs(after - t0) < 1e-9:
+            # The next chunk of the SAME stretch: carry on from where the robot
+            # is, trimmer on. ⚠️ Not _approach: its join is a transit (trimmer
+            # off), and the re-aim moves the chunk's start sideways by a few
+            # cm — every chunk then left an uncut sliver (CI, PR #48: the rock
+            # lawn 68.7% cut, the jam lawn 0.38 m outside).
+            here = self._robot_in(self._frame)
+            cut(here if here is not None else start)
+            return
         self._approach(token, piece_start, start, then=cut)
 
     def _chunked(self, a_map, b_map, pieces):

@@ -655,8 +655,11 @@ kadar kayık, çit payı 2–5 m olmak zorunda.
   sürülüyor; her parçadan önce satır, map→odom yaw'ının (pusula) satır
   başından beri ne kadar döndüğü kadar çevriliyor, ve yeniden yönlenen satır
   sonu "chain"in bir sonraki satırı kurduğu nokta oluyor (bu olmadan sonraki
-  satır 1 m kayıyordu). Ölçülen (`test_mission_long_rows.py`, 18 m çim,
-  sessiz GPS): satır çizgisinden sapma p95 **1,26 m → 0,39 m**. Kalan: pusulanın
+  satır 1 m kayıyordu). Aynı satırın sonraki parçası robotun olduğu yerden,
+  misina açık devam ediyor (önce bir geçiş "join"i vardı; misina kapalı
+  kaldığı için her parça arasında şerit kalıyordu: CI'da kaya çiminde %68,7,
+  sıkışma çiminde 0,38 m taşma). Ölçülen (`test_mission_long_rows.py`, 18 m çim,
+  sessiz GPS, iki koşu): satır çizgisinden sapma p95 **0,86–1,26 m → 0,39–0,49 m**. Kalan: pusulanın
   kendi ±1°'si ve parça başına birkaç cm. Gerçek MPU6050'nin kayması sahada
   ölçülecek.
 - Kamera senkronu için ayrı bir "yalpalama" manevrası yok: grid taramada her
@@ -667,4 +670,4 @@ kadar kayık, çit payı 2–5 m olmak zorunda.
 - ✅ ~~İstasyon iki yerde~~ — **3b'de kapandı** (aşağıda).
 - Survey edilmemiş engel hâlâ görünmez (menzil sensörü yok, karar 8).
 - ~~Pusula yön hatası odom'a çapalı uzun satırları eğiyor~~ — sebebi gyro
-  kaymasıydı, 4 m'lik parçalarla düzeltildi (yukarıda, p95 0,39 m).
+  kaymasıydı, 4 m'lik parçalarla düzeltildi (yukarıda, p95 0,39–0,49 m).
