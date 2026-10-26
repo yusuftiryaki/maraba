@@ -28,7 +28,7 @@ cd firmware/esp32_bridge && pio run
 
 # CI'ın koştuğu şeyin aynısı (.github/workflows/ci.yml sadece bunu çağırır)
 ./scripts/ci.sh unit              # ROS'suz saf Python testleri, saniyeler
-./scripts/ci.sh stack nav2 gazebo dock sweep mission # build + tam suite (~40 dk); skip = hata
+./scripts/ci.sh stack nav2 gazebo dock sweep mission orchard # build + tam suite; skip = hata
 ./scripts/ci.sh all               # yukarıdakiler + firmware
 
 # Simülatörde tüm robot + web arayüzü (tarayıcıda http://localhost:8080/)

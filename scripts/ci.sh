@@ -12,9 +12,10 @@
 #   dock      colcon build + battery -> return -> dock stacks      (~5 min)
 #   sweep     colcon build + docking from every side, one stack    (~12 min)
 #   mission   colcon build + coverage: GPS, a charge, a rock      (~25 min)
+#   orchard   colcon build + the kit's missions, long rows        (~30 min)
 #   all       the lot, in that order
 #
-# stack + nav2 + gazebo + dock + sweep + mission together are the whole suite: `stack` is defined as
+# stack + nav2 + gazebo + dock + sweep + mission + orchard together are the whole suite: `stack` is defined as
 # "everything that is not in HEAVY", so a new test file lands there by default
 # and cannot fall between the jobs.
 
@@ -30,11 +31,13 @@ GAZEBO_TESTS=(src/robot_sim/test/test_gazebo_physics.py src/robot_sim/test/test_
 DOCK_TESTS=(src/robot_sim/test/test_docking.py)
 SWEEP_TESTS=(src/robot_sim/test/test_docking_sweep.py)
 MISSION_TESTS=(src/robot_sim/test/test_mission_coverage.py src/robot_sim/test/test_mission_dock.py
-               src/robot_sim/test/test_mission_rock.py src/robot_sim/test/test_mission_jam.py
-               src/robot_sim/test/test_mission_kit.py src/robot_sim/test/test_orchard_stack.py
+               src/robot_sim/test/test_mission_rock.py src/robot_sim/test/test_mission_jam.py)
+# The kit's missions (docs/kit-soketi.md) and the long rows: their own job —
+# in `mission` they took it past its 45 min (cancelled, PR #48).
+ORCHARD_TESTS=(src/robot_sim/test/test_mission_kit.py src/robot_sim/test/test_orchard_stack.py
                src/robot_sim/test/test_mission_long_rows.py)
 HEAVY=("${NAV2_TESTS[@]}" "${GAZEBO_TESTS[@]}" "${DOCK_TESTS[@]}" "${SWEEP_TESTS[@]}"
-       "${MISSION_TESTS[@]}")
+       "${MISSION_TESTS[@]}" "${ORCHARD_TESTS[@]}")
 
 packages_with_tests() {
   local dir
@@ -208,6 +211,13 @@ stage_mission() {
   run_tests mission -s "${MISSION_TESTS[@]}"
 }
 
+stage_orchard() {
+  build_workspace
+  start_recorder orchard
+  echo ">> orchard"
+  run_tests orchard -s "${ORCHARD_TESTS[@]}"
+}
+
 stage_sweep() {
   build_workspace
   start_recorder sweep
@@ -220,9 +230,9 @@ stage_sweep() {
 
 for stage in "$@"; do
   case "${stage}" in
-    unit|firmware|stack|nav2|gazebo|dock|sweep|mission) "stage_${stage}" ;;
+    unit|firmware|stack|nav2|gazebo|dock|sweep|mission|orchard) "stage_${stage}" ;;
     all) stage_unit; stage_firmware; stage_stack; stage_nav2; stage_gazebo; stage_dock
-         stage_sweep; stage_mission ;;
+         stage_sweep; stage_mission; stage_orchard ;;
     *) echo "unknown stage: ${stage}" >&2; exit 2 ;;
   esac
 done
