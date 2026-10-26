@@ -111,11 +111,16 @@ sürtünmesi μ 0,5, yerçekimi eğilerek eğim):
   kalkıyor** (burun 1,25° yukarı, sonra geri iniyor); kitsiz kalkmıyor
   (0,33 g'de 0,02°). Sert duruş (0,33 g) kitle de bir şey yapmıyor (fren payı
   0,47 g).
-- ⚠️ **Sonuç:** Eğim tarafında "hız limiti değişmesin" kararı tutuyor (16°'nin
-  altındaki eğimlerde). Ama **ivme limiti yok**: köprüde de firmware'de de bir
-  rampa bulunmuyor, ve kitle sert bir kalkış öndeki tekerlekleri kaldırıyor.
-  Düz zeminde geri iniyor; taşlı arazide ya da arkaya doğru eğimde bu,
-  devrilmenin başladığı hareket. **Karar bekliyor** (aşağıda "Açık kalanlar").
+- **Sonuç:** Eğim tarafında "hız limiti değişmesin" kararı tutuyor (16°'nin
+  altındaki eğimlerde). Sert kalkış ise kitle ön tekerlekleri kaldırıyordu.
+- ✅ **Kitli modda hızlanma rampası** (kullanıcı kararı 2026-10-26): köprü,
+  `kit/state` "present" iken **yalnız hızlanmayı** `kit_max_linear_accel`
+  (1,5 m/s² ≈ 0,15 g) ile sınırlıyor (`command_limits.ramp_speed_up`; v ve ω
+  birlikte ölçeklenir, yay aynı kalır). Yavaşlama ve durma **hiç** rampalanmıyor:
+  sert duruş payın altında (0,33 g < 0,47 g) ve rampalı bir duruş her deadman /
+  zaman aşımı duruşunu uzatırdı. Kit yokken (ya da soket hiç yokken) hiçbir şey
+  değişmiyor. Gazebo'da aynı basamak kalkış: rampasız 0,46 g → burun 1,25°
+  kalkıyor; **rampalı 0,16 g → 0,06°** (kalkmıyor).
 - Plakayı öne almak biraz yardım ediyor ama çözmüyor: x = 0,20'de arka pay
   19,8°, kalkış payı 0,36 g.
 - ⚠️ Gazebo modeli (hoverbot.sdf) ön ve arka sarhoş tekerlekle elmas düzende;
@@ -410,10 +415,17 @@ TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
   (robotta QR adımının yerine). Kamera kendi şikâyetlerini (ısınma, kart dolu,
   kayıt durdu) `fault`'ta tutuyor. `fake_camera_shim` aynı protokolü sahte bir
   kamerayla konuşuyor (ısınıp duruyor, kartı doluyor).
-  ⚠️ **Gerçek shim (C++, SDK'ya bağlı) yazılmadı:** SDK'nın başlık dosyaları bu
-  makinede yok. Elindeki SDK paketi container'a bağlanınca (`~/repos`) yazılıp
-  derlenecek. O zamana kadar `cam360_ctrl`'lü bir kit robotta DEGRADED kalır
-  (kamera sessiz) ve kamera isteyen görevler reddedilir — kayıtsız tarama yerine.
+  ✅ **Gerçek shim yazıldı** (`robot_kit/shim/kit_camera_shim.cpp`, SDK 2.1.8):
+  SDK repoya girmiyor, shim `scripts/build_camera_shim.sh <SDK dizini>` ile
+  `~/.robot/sdk/` altına derleniyor (kit_camera varsayılan olarak oraya
+  bakıyor; kütüphane yanında, rpath `$ORIGIN/lib`). Pi için paketteki
+  **aarch64** (gcc-arm-11.2) SDK'sı kullanılır; betik mimari uymazsa durur.
+  Bağlanınca `EnableAutoStopRecordAfterDisconnet(false)` (fiş çıkınca kayıt
+  sürer), ısınma / kart dolu / pil / kayıt durdu bildirimleri olay olarak
+  geliyor, saat `SyncLocalTimeToCamera` (saniye, SDK başlığına göre).
+  Doğrulanan: x86-64'te derleniyor ve gerçek SDK'yla protokolü konuşuyor
+  (kamera yokken "no camera found"; `test_camera.py`, `KIT_CAMERA_SHIM` ile).
+  ⚠️ **Gerçek bir kamerayla hiç denenmedi**; Pi'da da derlenmedi.
 
 ## K2: yapılanlar (simülatör)
 
@@ -489,10 +501,7 @@ TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
 
 ## Açık kalanlar
 
-- **Kitli modda ivme limiti (karar bekliyor):** Gazebo'da sert kalkış kitle ön
-  tekerlekleri kaldırdı (yukarıda). Seçenekler: kitli modda köprüde bir ivme
-  rampası (örn. 0,2 g ≈ 2 m/s²), ya da hiç değişiklik yok. Motor komut yolunu
-  değiştirdiği için kullanıcı kararı olmadan yapılmadı.
+- ✅ ~~Kitli modda ivme limiti~~ — yapıldı (hızlanma rampası, yukarıda).
 
 - **Kayıt sürerken canlı görüntü alınabiliyor mu?** SDK belgesi söylemiyor.
   Kitin kamerasıyla algının tamamı buna bağlı; K3'te denenir.

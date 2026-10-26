@@ -22,8 +22,8 @@ Why a separate process: the SDK needs root or a udev rule for USB, runs its
 own HTTP server (port 9099), and is closed source — a crash in it must not
 take a ROS node down with it, and a robot built without it must still build.
 `fake_camera_shim` speaks the same protocol with a simulated camera; the real
-shim (C++, linked against the SDK) is written once the SDK's headers are on
-the build machine (docs/kit-soketi.md, "360° kamera").
+one is robot_kit/shim/kit_camera_shim.cpp, built against the SDK outside the
+repo (scripts/build_camera_shim.sh -> ~/.robot/sdk/kit_camera_shim).
 """
 
 from __future__ import annotations

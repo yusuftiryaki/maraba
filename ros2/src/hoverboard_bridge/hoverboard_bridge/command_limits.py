@@ -21,7 +21,14 @@ Three rules, in order:
      speed = (l + r) / 2 and steer = (l - r) / 2 under it too, so the firmware
      clamp never has to act.
 
-And both functions are TOTAL: no input — a NaN, 1e308 that overflows halfway,
+A fourth, only with the kit's mast on (docs/kit-soketi.md, K2b): SPEEDING UP
+is limited (ramp_speed_up); slowing down never is. Measured in Gazebo, a step
+start (0.46 g) lifts the front casters with the mast on and not without it,
+while a hard stop (0.33 g) does nothing — and a stop that had to ramp would
+also stretch every deadman and timeout stop. Same rule 2 as above: v and w are
+scaled together, so a ramped arc is the same arc, slower.
+
+And every function here is TOTAL: no input — a NaN, 1e308 that overflows halfway,
 a limit of zero, a negative or NaN limit from a bad parameter file — can make
 them raise or reverse the direction. Every one of those returns a stop. (The
 bridge also refuses to start on such parameters; this is the second line.)
@@ -96,3 +103,23 @@ def wheel_commands(v: float, w: float, geometry: DriveGeometry,
     if not is_finite_command(speed, steer):
         return 0, 0
     return int(round(speed)), int(round(steer))
+
+
+def ramp_speed_up(prev_v: float, v: float, w: float, max_accel: float,
+                  dt: float) -> Tuple[float, float]:
+    """(v, w), with |v| allowed to GROW by at most max_accel * dt from prev_v.
+
+    Shrinking |v| (braking, stopping) passes untouched; a reversal brakes to
+    zero at once and then speeds up under the limit. w is scaled with v (the
+    arc is kept); a pure turn (v = 0) is never ramped. max_accel <= 0 or not
+    finite = no ramp (the kitless robot). Non-finite input -> (0, 0)."""
+    if not (is_finite_command(v, w) and math.isfinite(prev_v) and math.isfinite(dt)):
+        return 0.0, 0.0
+    if not _usable_limit(max_accel) or dt <= 0.0:
+        return v, w
+    base = abs(prev_v) if prev_v * v > 0.0 else 0.0
+    allowed = base + max_accel * dt
+    if abs(v) <= allowed:
+        return v, w
+    scale = allowed / abs(v)
+    return v * scale, w * scale
