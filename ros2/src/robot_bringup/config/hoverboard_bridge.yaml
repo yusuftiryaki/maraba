@@ -47,6 +47,9 @@ hoverboard_bridge:
     # A NaN/inf command is treated as STOP and reported in /diagnostics.
     max_linear_vel: 1.0
     max_angular_vel: 1.5
+    # Only with the orchadOS kit's mast on (kit/state present): speeding up
+    # limited, slowing down never (docs/kit-soketi.md K2b). 0 = off.
+    kit_max_linear_accel: 1.5
     # These, speed_limit, steer_sign (+1/-1), the geometry and cmd_per_rpm
     # (finite, non-zero) are VALIDATED: the bridge refuses to start rather
     # than drive on a value that would reverse the motors or divide by zero.

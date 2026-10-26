@@ -69,3 +69,18 @@ def test_fake_camera_fills_its_card():
     camera.tick(1.5)
     assert camera.recording_since is None
     assert camera.pending_events == ["storage_full", "capture_stopped"]
+
+
+@pytest.mark.skipif(not os.environ.get("KIT_CAMERA_SHIM"),
+                    reason="KIT_CAMERA_SHIM unset (the SDK-linked shim is built outside the repo: "
+                           "scripts/build_camera_shim.sh)")
+def test_the_real_shim_speaks_the_protocol():
+    """The SDK-linked shim, no camera attached: a refused connect, as JSON, not a hang."""
+    client = ShimClient([os.environ["KIT_CAMERA_SHIM"]], timeout_s=30.0)
+    try:
+        with pytest.raises(CameraError, match="no camera found"):
+            client.call("connect")
+        with pytest.raises(CameraError, match="not connected"):
+            client.call("status")
+    finally:
+        client.close()

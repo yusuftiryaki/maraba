@@ -215,9 +215,19 @@ uyarır). İçindekiler ve gerekçeleri dosyanın yorumlarında: `site_file`,
    ```
    Dosya yoksa kit RTK'sız çalışır (F9P tek başına ~1 m); orchadOS'un PPK'sı
    bundan etkilenmez.
-6. **robot.service:** `ExecStart` satırına `use_kit:=true` ekle. Kit takılı
+6. **360° kamera (Insta360 Camera SDK, repoya girmez):** SDK zip'indeki
+   aarch64 paketini (`CameraSDK-...-gcc-arm-11.2-...-aarch64-...tar.gz`) Pi'da
+   aç, sonra `./scripts/build_camera_shim.sh <açılan dizin>` →
+   `~/.robot/sdk/kit_camera_shim`. USB izni için (sudo yerine):
+   ```
+   # /etc/udev/rules.d/99-insta360.rules
+   SUBSYSTEM=="usb", ATTRS{idVendor}=="2e1a", MODE="0666"
+   ```
+   Kamera USB modu **Android** olmalı (X4/X5'te bağlanınca ekranda seçilir).
+   Kontrol: `echo '{"id":1,"cmd":"connect"}' | ~/.robot/sdk/kit_camera_shim`.
+7. **robot.service:** `ExecStart` satırına `use_kit:=true` ekle. Kit takılı
    değilken de zararsızdır: GPS NEO-6M'de kalır.
-7. **Kontrol:** `ros2 topic echo /kit/state --once` → kit takılıyken
+8. **Kontrol:** `ros2 topic echo /kit/state --once` → kit takılıyken
    `"state": "READY"`, `"gps_source": "kit"` (robot dururken geçer).
 
 ## Sıra / bağımlılıklar

@@ -141,3 +141,49 @@ def test_steer_sign_minus_one_still_keeps_both_wheels_under_the_limit():
     assert (speed, steer) == (273, 27)
     # with steer_sign -1 the board's left wheel is speed - steer
     assert max(abs(speed + steer), abs(speed - steer)) == 300
+
+
+# --- ramp_speed_up: the kit's mast (docs/kit-soketi.md K2b) ---------------------
+
+def test_speeding_up_is_ramped_and_the_arc_kept():
+    from hoverboard_bridge.command_limits import ramp_speed_up
+    v, w = ramp_speed_up(0.0, 0.5, 0.25, max_accel=1.5, dt=0.02)
+    assert v == pytest.approx(0.03) and w / v == pytest.approx(0.5)
+    v, w = ramp_speed_up(0.3, 0.5, 0.0, max_accel=1.5, dt=0.02)
+    assert v == pytest.approx(0.33)
+
+
+def test_braking_and_stopping_are_never_ramped():
+    from hoverboard_bridge.command_limits import ramp_speed_up
+    assert ramp_speed_up(0.5, 0.0, 0.0, 1.5, 0.02) == (0.0, 0.0)
+    assert ramp_speed_up(0.5, 0.1, 0.2, 1.5, 0.02) == (0.1, 0.2)
+    # a reversal stops at once, then speeds up the other way under the limit
+    v, _w = ramp_speed_up(0.5, -0.5, 0.0, 1.5, 0.02)
+    assert v == pytest.approx(-0.03)
+
+
+def test_a_turn_in_place_is_not_ramped():
+    from hoverboard_bridge.command_limits import ramp_speed_up
+    assert ramp_speed_up(0.0, 0.0, 1.0, 1.5, 0.02) == (0.0, 1.0)
+
+
+@pytest.mark.parametrize("accel", [0.0, -1.0, float("nan"), float("inf")])
+def test_no_usable_limit_is_no_ramp(accel):
+    from hoverboard_bridge.command_limits import ramp_speed_up
+    assert ramp_speed_up(0.0, 0.5, 0.1, accel, 0.02) == (0.5, 0.1)
+
+
+@pytest.mark.parametrize("args", [(float("nan"), 0.5, 0.0), (0.0, float("nan"), 0.0),
+                                  (0.0, 0.5, float("inf"))])
+def test_ramp_non_finite_is_stop(args):
+    from hoverboard_bridge.command_limits import ramp_speed_up
+    assert ramp_speed_up(*args, 1.5, 0.02) == (0.0, 0.0)
+
+
+def test_ramp_reaches_the_target_at_the_limit():
+    from hoverboard_bridge.command_limits import ramp_speed_up
+    v, t = 0.0, 0.0
+    while v < 0.5:
+        v, _ = ramp_speed_up(v, 0.5, 0.0, 1.5, 0.02)
+        t += 0.02
+    assert t == pytest.approx(0.5 / 1.5, abs=0.021)
