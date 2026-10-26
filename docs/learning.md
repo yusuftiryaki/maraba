@@ -590,8 +590,21 @@ ivme + `edge.dir`, sahalar 20–22, 90 s).
   sahada gövdeye dayandı; güvenlik zinciri (sıkışma → kapı) durdurdu.
 - **cw öğrenilmedi:** robot başlangıçta yerinde dönüp ağaca yaklaşmıyor
   (%98 dönüş). Kenar takibindeki 6d-4'ün yön belirsizliğine benziyor
-  (`edge.dir` durumda ama yaklaşma bölümü iki yönde farklı başlıyor). Sıradaki
-  deneme 6d-5'in DAgger'ı (`dagger_batch --task tree --camera pano`).
+  (`edge.dir` durumda ama yaklaşma bölümü iki yönde farklı başlıyor).
+- ✅ **DAgger 1. tur (2026-10-26):** `dagger_batch --task tree --camera pano`
+  (yeni seçenekler), sahalar 101–109 × 2 yön, devralma açık (cw'de 3–5
+  devralma/bölüm); 18 uzman + 18 DAgger bölümü, 10 000 adım
+  (`hoverbot-tree-pano-dagger1`, `~/.robot/policies/act_tree_pano_dagger1`):
+
+| saha | ccw | cw |
+|---|---|---|
+| 20 | **5,9 tur**, 3,4 cm, 0 çarpışma | **5,7 tur**, 3,7 cm, 0 |
+| 21 | **4,8 tur**, 2,6 cm, 0 | **5,0 tur**, 4,2 cm, 0 |
+| 22 | gövdeye dayandı (3 temas), kapı kapandı | **5,1 tur**, 6,4 cm, 0 |
+
+  **cw çözüldü** (her üç sahada 5–6 tur, çarpışmasız); 6 koşunun 5'i
+  başarılı. Saha 22 ccw iki politikada da gövdeye dayanıyor — ikinci DAgger
+  turu adayı. Güvenlik zinciri (sıkışma → kapı) her seferinde durdurdu.
 - ⚠️ Kamera simde kusursuz bir birleştirme; gerçekte iki balıkgözü, dikiş,
   pozlama ve **kayıt sürerken canlı görüntünün SDK'dan alınabilmesi şartı**
   (doğrulanmadı) var.

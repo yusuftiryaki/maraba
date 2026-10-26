@@ -89,25 +89,28 @@ class Takeover:
 
 
 def run_lawn(driver, seed: int, direction: str, args) -> Dict:
-    from robot_sim.edge_batch import Stack
-    from robot_sim.lawn_gen import random_lawn
+    from robot_sim.edge_batch import TASKS, Stack, scene
     from robot_sim.site_world import area_feature
 
-    lawn = random_lawn(seed)
+    # The world edge_batch's expert episodes were recorded in: the lawn and,
+    # for --task tree (6g), a trunk on it to circle.
+    world = scene(seed, args.task, args.offset)
+    lawn = world["lawn"]
     workdir = tempfile.mkdtemp(prefix=f"dagger_{seed}_{direction}_")
     site_file = os.path.join(workdir, "site.geojson")
     with open(site_file, "w", encoding="utf-8") as handle:
         json.dump({"type": "FeatureCollection",
                    "features": [area_feature("cim", lawn, 41.0, 29.0)]}, handle)
-    stack = Stack(workdir, site_file, args.out, seed, args.gps, args.camera_hz)
+    stack = Stack(workdir, site_file, args.out, seed, args.gps, args.camera_hz,
+                  camera=args.camera, extra_sim=world["sim"])
     outcome: Dict = {"seed": seed, "direction": direction}
     try:
         driver.recorder = driver.expert = None
         driver.wait(lambda: driver.recorder is not None, 90.0, "the episode recorder")
         stack.spawn(["ros2", "run", "robot_sim", "edge_expert", "--ros-args",
-                     "-p", f"site_file:={site_file}", "-p", f"offset_m:={args.offset}",
+                     "-p", f"site_file:={site_file}", "-p", f"offset_m:={world['offset']}",
                      "-p", f"direction:={direction}", "-p", f"laps:={args.laps}",
-                     "-p", "drive:=false"])
+                     "-p", "drive:=false", *world["expert"]])
         driver.wait(lambda: driver.expert is not None, 30.0, "the expert")
         policy = stack.spawn([args.python, "-m", "robot_learning.policy_node", "--ros-args",
                               "-p", f"checkpoint:={args.checkpoint}",
@@ -116,13 +119,14 @@ def run_lawn(driver, seed: int, direction: str, args) -> Dict:
         if policy.poll() is not None:
             log = os.path.join(workdir, f"proc{len(stack.procs) - 1}.log")
             raise RuntimeError("policy_node died: " + open(log, encoding="utf-8").read()[-800:])
-        note = {"seed": seed, "direction": direction, "gps": args.gps, "offset_m": args.offset,
+        note = {"seed": seed, "direction": direction, "gps": args.gps,
+                "offset_m": world["offset"], **world["note"],
                 "lawn_wkt": lawn.wkt, "expert": "robot_sim edge_expert (privileged, labels only)",
                 "driver": f"policy {os.path.basename(args.checkpoint.rstrip('/'))}",
                 "takeover_s": args.takeover_s}
         # intervention: the policy drove, the expert took the wheel at times.
         mode = "intervention" if args.takeover_s > 0 else "autonomous"
-        name = driver.episode("start", {"task": "kenar takibi (uzman)", "mode": mode,
+        name = driver.episode("start", {"task": TASKS[args.task], "mode": mode,
                                         "note": json.dumps(note)})
         driver.wait(lambda: (driver.recorder or {}).get("ready"), 60.0, "READY")
         gate: List[Dict] = []
@@ -190,6 +194,10 @@ def main(argv=None) -> int:
     parser.add_argument("--gps", choices=("quiet", "neo6m"), default="quiet",
                         help="quiet: the gate's fence is in map, = sim_world only then")
     parser.add_argument("--camera-hz", type=float, default=10.0)
+    parser.add_argument("--task", choices=("edge", "tree"), default="edge",
+                        help="tree: circle a trunk (6f/6g), as edge_batch --task tree")
+    parser.add_argument("--camera", choices=("front", "edge", "pano"), default="front",
+                        help="the camera the policy was trained on (edge_batch --camera)")
     parser.add_argument("--offset", type=float, default=0.4)
     parser.add_argument("--laps", type=float, default=1.0)
     parser.add_argument("--seconds", type=float, default=150.0)

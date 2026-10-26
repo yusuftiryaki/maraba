@@ -484,6 +484,10 @@ TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
   `map`'te sürülüyor. Ölçülen (3×2 ağaç, F9P tek nokta, NTRIP yok):
   koridordan sapma p95 **0,23 m** (RTK'da 0,095), konum hatası ortanca
   0,06 / p95 0,33 m, 24 ağaç yüzünün 23–24'ü görüldü, temas yok.
+  ⚠️ **Kararlı değil:** sonraki koşularda 0,61–0,79 m, CI'da 0,72 m (konum
+  p95 0,50 m, 20/24 yüz). Bu yüzden testte bu durum yalnız ölçülüyor; kapı
+  (assert) yalnız güvenlik için (görev biter, temas yok). Kök neden aşağıda,
+  açık.
   ⚠️ **Yolda bulunanlar:**
   - Düzeltme bahçenin kenarında kesilince (4'ten az gövde) tahmin 1–2 sn
     içinde tek noktalı F9P'nin 1–2 m'lik sapmasına kayıyordu (EKF onun
