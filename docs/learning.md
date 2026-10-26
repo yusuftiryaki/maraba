@@ -605,6 +605,24 @@ ivme + `edge.dir`, sahalar 20–22, 90 s).
   **cw çözüldü** (her üç sahada 5–6 tur, çarpışmasız); 6 koşunun 5'i
   başarılı. Saha 22 ccw iki politikada da gövdeye dayanıyor — ikinci DAgger
   turu adayı. Güvenlik zinciri (sıkışma → kapı) her seferinde durdurdu.
+- **DAgger 2. tur (2026-10-26):** 1. turun politikası sürdü, sahalar 111–119
+  × 2 yön (18 bölümün **15'inde tur tamamlandı**; 1. turda 6), toplam 54
+  bölüm, 10 000 adım (`hoverbot-tree-pano-dagger2`,
+  `~/.robot/policies/act_tree_pano_dagger2`):
+
+| saha | ccw | cw |
+|---|---|---|
+| 20 | 5,9 tur, 3,0 cm, 0 | 5,7 tur, 2,8 cm, 0 |
+| 21 | 5,0 tur, 1,4 cm, 0 | 5,0 tur, 3,3 cm, 0 |
+| 22 | **yine gövdeye dayandı** (21 temas), kapı kapandı | 4,9 tur, 4,1 cm, 0 |
+
+  Beş koşu aynı kaldı ya da hatası düştü; **saha 22 ccw düzelmedi**. Saha
+  22'nin ağacı eğitimdekilerin kenarında: robotun **sağında** (−97°) ve
+  **kalın** (r 0,22 m), ve ccw ağacı solda ister — yaklaşmada yarım tur
+  dönmek gerekiyor. 27 eğitim sahasında böyle olan yok (kalın gövdeler
+  101/102/111/116 öndedir ya da arkadadır; 116 da DAgger'da sıkıştı).
+  Rastgele yeni sahalar bu durumu nadiren üretiyor; düzeltmek için hedefli
+  sahalar (kalın gövde, yana düşen konum) gerekir.
 - ⚠️ Kamera simde kusursuz bir birleştirme; gerçekte iki balıkgözü, dikiş,
   pozlama ve **kayıt sürerken canlı görüntünün SDK'dan alınabilmesi şartı**
   (doğrulanmadı) var.

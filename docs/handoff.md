@@ -681,7 +681,10 @@ ilk envanter insanla. Tek kaynak kit-soketi.md; burada yalnız durum:
 - **Kullanıcı kararı (2026-10-26):** RTK'sız gövdeli taramada kenarlardaki
   kayma (koridor p95 0,23–0,79 m, kararsız) **önemli değil**, EKF ayarı
   yapılmayacak; testte yalnız ölçülüyor.
-- Açık: 6g saha 22 ccw (DAgger 2. tur); orchadOS tarafında çipe manifest
+- 6g DAgger 2. tur (2026-10-26): 5 koşu iyi (hata 1,4–4,1 cm), **saha 22 ccw
+  hâlâ gövdeye dayanıyor** — ağacı eğitim dağılımının dışında (yanda, kalın);
+  hedefli sahalar gerekir (learning.md 6g).
+- Açık: orchadOS tarafında çipe manifest
   yazan araç + test vektörleri (ayrı repo); gerçek gövde dedektörü; tüm
   donanım adımları (K3, deployment.md Adım 9).
 - ⚠️ **Container rebuild `~/.robot`'u ve /tmp'yi siliyor** (politikalar,
