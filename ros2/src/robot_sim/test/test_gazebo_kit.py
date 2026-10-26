@@ -14,6 +14,7 @@ The pitch comes from a 3-D OdometryPublisher (/gazebo/pose_3d) that only the
 kit model carries. CI stage `gazebo`. SKIPs without ROS or gz.
 """
 
+import json
 import math
 import os
 import shutil
@@ -30,6 +31,8 @@ from ament_index_python.packages import get_package_share_directory  # noqa: E40
 from geometry_msgs.msg import Twist                      # noqa: E402
 from nav_msgs.msg import Odometry                        # noqa: E402
 from rclpy.node import Node                              # noqa: E402
+from rclpy.qos import DurabilityPolicy, QoSProfile       # noqa: E402
+from std_msgs.msg import String                          # noqa: E402
 
 from robot_sim import kit_model                          # noqa: E402
 from conftest import GazeboStack                         # noqa: E402
@@ -138,15 +141,25 @@ def probe(ros):
     node.destroy_node()
 
 
-@pytest.mark.parametrize("kg, lifts", [(kit_model.KIT_MASS_KG, True), (0.01, False)])
-def test_hard_start_and_stop(kit_gazebo, probe, kg, lifts):
+@pytest.mark.parametrize("kg, ramp, lifts", [(kit_model.KIT_MASS_KG, False, True),
+                                             (kit_model.KIT_MASS_KG, True, False),
+                                             (0.01, False, False)])
+def test_hard_start_and_stop(kit_gazebo, probe, kg, ramp, lifts):
     """A step start lifts the front casters with the mast on and not without
-    it — the mast is what does it, not the model (the second case is the
+    it — the mast is what does it, not the model (the third case is the
     control). By hand: launch margin 0.29 g with the kit, 0.62 g without; what
-    the wheels' friction (mu 0.5) can deliver lies between."""
+    the wheels' friction (mu 0.5) can deliver lies between.
+
+    ramp: the bridge told the kit is on the plate (kit/state present, as
+    kit_manager says it), so it limits speeding up (kit_max_linear_accel,
+    1.5 m/s^2 ~ 0.15 g): the same step must then NOT lift the nose."""
     masses = (*kit_model.ROBOT, kit_model.kit_mass(kg=kg)) if kg > 0.1 else kit_model.ROBOT
     margins = kit_model.margins(masses)
     kit_gazebo(kg=kg)
+    if ramp:
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        kit_state = probe.create_publisher(String, "/kit/state", latched)
+        kit_state.publish(String(data=json.dumps({"state": "READY", "present": True})))
     probe.ready()
     probe.run(0.0, 3.0)
     rest = probe.pitch
@@ -157,13 +170,16 @@ def test_hard_start_and_stop(kit_gazebo, probe, kg, lifts):
     _low, brake_high = probe.run(0.0, 4.0)
     brake_a = probe.peak_accel()
     nose_up, nose_down = rest - launch_low, brake_high - rest
-    print(f"{'kit' if lifts else 'no kit'} (URDF casters): hard start {launch_a / kit_model.G:.2f} g "
+    print(f"{'kit' if kg > 0.1 else 'no kit'}{' + ramp' if ramp else ''} (URDF casters): hard start {launch_a / kit_model.G:.2f} g "
           f"-> nose up {nose_up:.2f}°; hard stop {brake_a / kit_model.G:.2f} g -> nose down "
           f"{nose_down:.2f}° (by hand: lifts beyond launch {margins['launch_g']:.2f} g, "
           f"brake {margins['brake_g']:.2f} g)")
     assert nose_up < 45.0 and nose_down < 45.0, "it fell over"
     if lifts:
         assert nose_up > LIFT_DEG, "kit_model says a step start lifts the nose; physics disagrees"
+    elif ramp:
+        assert nose_up < LIFT_DEG, "the speed-up ramp did not keep the nose down"
+        assert launch_a < margins["launch_g"] * kit_model.G, "the ramp let a launch past the margin"
     else:
         assert nose_up < LIFT_DEG, "the bare robot lifted its nose: the control failed"
 

@@ -21,6 +21,7 @@ parameter below.
 
 from __future__ import annotations
 
+import json
 import math
 
 import rclpy
@@ -31,12 +32,13 @@ from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from sensor_msgs.msg import BatteryState, JointState
-from std_msgs.msg import Bool
+from rclpy.qos import DurabilityPolicy, QoSProfile
+from std_msgs.msg import Bool, String
 from std_srvs.srv import Trigger
 from tf2_ros import TransformBroadcaster
 
 from hoverboard_bridge.command_limits import (
-    DriveGeometry, is_finite_command, limit_twist, wheel_commands)
+    DriveGeometry, is_finite_command, limit_twist, ramp_speed_up, wheel_commands)
 from hoverboard_bridge.protocol import SPEED_LIMIT, FeedbackParser, pack_pi_command
 
 RPM_TO_RAD_S = 2.0 * math.pi / 60.0
@@ -93,6 +95,12 @@ class HoverboardBridge(Node):
         # Nav2 asks for 0.5 m/s and 0.6 rad/s (nav2.yaml).
         self.declare_parameter("max_linear_vel", 1.0)    # m/s
         self.declare_parameter("max_angular_vel", 1.5)   # rad/s
+        # With the kit's mast on the plate (robot_kit kit/state "present"):
+        # speeding up is limited to this, slowing down never is
+        # (command_limits.ramp_speed_up; docs/kit-soketi.md K2b — a step start
+        # lifts the front casters at 0.46 g, the margin is 0.29 g). 0 = off.
+        # Without a kit/state at all (no socket) nothing is ramped.
+        self.declare_parameter("kit_max_linear_accel", 1.5)   # m/s^2
 
         # EspFeedback raw -> SI. EFeru: batVoltage in 0.01 V, boardTemp in 0.1 C.
         # TODO: sanity check against a multimeter once the board is flashed.
@@ -134,6 +142,10 @@ class HoverboardBridge(Node):
             steer_sign=self._steer_sign,
         )
         self._cmd_timeout = p("cmd_timeout").value
+        self._kit_accel = float(p("kit_max_linear_accel").value)
+        self._kit_on = False
+        self._sent_v = 0.0          # what the last tx frame asked for, m/s
+        self._last_tx = None
         self._battery_scale = p("battery_scale").value
         self._temp_scale = p("temp_scale").value
         self._battery_cells = int(p("battery_cells").value)
@@ -174,6 +186,9 @@ class HoverboardBridge(Node):
         cmd_type = TwistStamped if p("use_stamped_cmd_vel").value else Twist
         cmd_cb = self._on_cmd_stamped if cmd_type is TwistStamped else self._on_cmd
         self.create_subscription(cmd_type, "cmd_vel", cmd_cb, 10)
+        self.create_subscription(
+            String, "kit/state", self._on_kit,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
 
         self._odom_pub = self.create_publisher(Odometry, "odom", 10)
         self._joint_pub = self.create_publisher(JointState, "joint_states", 10)
@@ -217,6 +232,17 @@ class HoverboardBridge(Node):
         self._target_v, self._target_w = limit_twist(v, w, self._max_v, self._max_w)
         self._last_cmd_time = self.get_clock().now()
 
+    def _on_kit(self, msg: String) -> None:
+        try:
+            on = bool(json.loads(msg.data).get("present"))
+        except (ValueError, AttributeError):
+            return
+        if on != self._kit_on:
+            self.get_logger().info(
+                f"kit {'on' if on else 'off'} the plate: speed-up "
+                + (f"limited to {self._kit_accel:g} m/s^2" if on else "not limited"))
+        self._kit_on = on
+
     def _on_cmd_stamped(self, msg: TwistStamped) -> None:
         self._on_cmd(msg.twist)
 
@@ -236,6 +262,14 @@ class HoverboardBridge(Node):
             v, w = 0.0, 0.0
         else:
             v, w = self._target_v, self._target_w
+        now = self.get_clock().now()
+        if self._kit_on:
+            # dt from the clock, capped: a late tick must not unlock a jump
+            dt = 0.0 if self._last_tx is None else min(
+                0.1, (now - self._last_tx).nanoseconds * 1e-9)
+            v, w = ramp_speed_up(self._sent_v, v, w, self._kit_accel, dt)
+        self._last_tx = now
+        self._sent_v = v
 
         # Inverse kinematics + per-wheel raw limit; non-finite -> (0, 0).
         speed, steer = wheel_commands(v, w, self._geometry, self._speed_limit)
@@ -405,6 +439,8 @@ class HoverboardBridge(Node):
             KeyValue(key="scaled_cmds", value=str(self._scaled_cmds)),
             KeyValue(key="max_linear_vel", value=f"{self._max_v:g}"),
             KeyValue(key="max_angular_vel", value=f"{self._max_w:g}"),
+            KeyValue(key="kit_speed_up_limit",
+                     value=f"{self._kit_accel:g} m/s^2" if self._kit_on else "off (no kit)"),
             KeyValue(key="speed_limit_raw", value=str(self._speed_limit)),
         ]
         self._rejected_since_diag = 0
