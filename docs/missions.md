@@ -645,11 +645,20 @@ kadar kayık, çit payı 2–5 m olmak zorunda.
   `map` artık gezinmiyor). Ölçülen: koridordan sapma p95 **0,095 m** (en kötü
   0,24, dönüşlerde), 6 ağacın hepsi dört yönden geçildi, hiç temas yok.
   Bu biçme için de geçerli: RTK fixed varken kaplama satırları da `map`'te.
-- ⚠️ **Aynı yön hatası NEO-6M ile biçmede de var ve açık:** "chain" çapası
-  deseni ilk waypoint'ten pusula yönüyle ölü hesapla kuruyor; 3° hata 20 m'lik
-  satırda ~1 m. Mevcut kaplama testlerinin 4 m'lik çiminde bu ~0,2 m'ye
-  düşüyor, o yüzden görünmedi. Gerçek bir pusula kalibrasyonunun ne kadar
-  yaklaştırdığı sahada ölçülecek (`mag-calibration.md`).
+- ✅ **Düzeltme (2026-10-26): sebep pusula değil GYRO'ydu.** İz yeniden
+  incelenince sapma mesafeyle doğrusal değil **karesiyle** büyüyordu: odom'un
+  yaw'ı entegre gyro, kalan sapması (sim 0,1°/s) odom'u dünyaya göre
+  döndürüyor, odom'da düz çizgi yerde bir yay oluyor (0,5·bias/v·L²; izden
+  0,09°/s çıkıyor). `map`'in yönü ile konumları ise uyumlu: ±1°, sabit kayma
+  yok (`test_map_heading.py`; navsat_transform UTM yakınsamasını kendisi
+  düzeltiyor). Artık odom'daki satırlar **`max_leg_m` (4 m) parçalarla**
+  sürülüyor; her parçadan önce satır, map→odom yaw'ının (pusula) satır
+  başından beri ne kadar döndüğü kadar çevriliyor, ve yeniden yönlenen satır
+  sonu "chain"in bir sonraki satırı kurduğu nokta oluyor (bu olmadan sonraki
+  satır 1 m kayıyordu). Ölçülen (`test_mission_long_rows.py`, 18 m çim,
+  sessiz GPS): satır çizgisinden sapma p95 **1,26 m → 0,39 m**. Kalan: pusulanın
+  kendi ±1°'si ve parça başına birkaç cm. Gerçek MPU6050'nin kayması sahada
+  ölçülecek.
 - Kamera senkronu için ayrı bir "yalpalama" manevrası yok: grid taramada her
   koridor sonunda yerinde 90–180° dönüşler var, jiroskop ile IMU arasındaki
   ortak işaret için yeterince güçlü.
@@ -657,5 +666,5 @@ kadar kayık, çit payı 2–5 m olmak zorunda.
 ## Bilinen açıklar
 - ✅ ~~İstasyon iki yerde~~ — **3b'de kapandı** (aşağıda).
 - Survey edilmemiş engel hâlâ görünmez (menzil sensörü yok, karar 8).
-- Pusula yön hatası odom'a çapalı uzun satırları eğiyor (yukarıda,
-  `orchard_grid`); RTK fixed'da kapalı, NEO-6M'de açık.
+- ~~Pusula yön hatası odom'a çapalı uzun satırları eğiyor~~ — sebebi gyro
+  kaymasıydı, 4 m'lik parçalarla düzeltildi (yukarıda, p95 0,39 m).

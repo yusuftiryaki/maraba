@@ -132,6 +132,9 @@ class MissionRunner(Node):
         # no longer wanders, and an odom-anchored row inherits the compass's
         # heading error for its whole length (_row_frame).
         self.declare_parameter("rtk_rows_in_map", True)
+        # Rows in `odom` are driven in chunks this long, re-aimed between them
+        # (_cut_pieces: the gyro's drift). 0 = whole rows (before 2026-10-26).
+        self.declare_parameter("max_leg_m", 4.0)
 
         p = self.get_parameter
         self._robot = RobotSpec(cut_width=p("cut_width").value,
@@ -564,7 +567,7 @@ class MissionRunner(Node):
             pieces = free_intervals((before.x, before.y), (waypoint.x, waypoint.y),
                                     [(x, y, r + grow) for x, y, r in self._detected])
             pieces = self._not_behind(before, waypoint, pieces)
-            self._cut_pieces(token, before, waypoint, start, target, pieces)
+            self._cut_pieces(token, before, waypoint, start, target, pieces, index=index)
             return
         # A transit to the next row's start.
         self._approach(token, waypoint, target,
@@ -662,28 +665,72 @@ class MissionRunner(Node):
         return [(max(t0, t_here), t1) for t0, t1 in pieces
                 if (t1 - max(t0, t_here)) * length >= 0.3]
 
-    def _cut_pieces(self, token: int, a_map, b_map, a_odom, b_odom, pieces) -> None:
+    def _cut_pieces(self, token: int, a_map, b_map, a_odom, b_odom, pieces,
+                    yaw0=None, index=None) -> None:
         """Mow pieces[0], then the rest, each reached first with the trimmer
-        off (_approach: never a slanted row from wherever the robot is)."""
+        off (_approach: never a slanted row from wherever the robot is).
+
+        ⚠️ A ROW IN `odom` DRIFTS WITH THE GYRO. ekf_local's yaw is integrated
+        gyro, so odom rotates against the world at the gyro's residual bias,
+        and a straight line in odom is an ARC on the ground: lateral error
+        0.5 * bias / v * L². MEASURED (test_orchard_stack, before rows went to
+        `map` on RTK): 0.95 m at the end of a 16.6 m row, growing with the
+        square of the distance (0.09°/s bias at 0.3 m/s — the sim's 0.1°/s).
+        So a row is driven in chunks of at most `max_leg_m`, and before each
+        chunk the whole row is turned in odom by how far map->odom's yaw
+        (the compass, through ekf_global) has moved since the row started:
+        the drift is undone every chunk instead of compounding over the row.
+        Not in `map` (RTK, trunks): there the controller is closed-loop."""
         if not pieces:
             self._run(self._policy.goal_result(token, Result.SUCCEEDED, self._now()))
             return
+        in_odom = self._frame != "map"
+        if yaw0 is None and in_odom:
+            tf = self._map_to_odom()
+            yaw0 = tf[2] if tf is not None else 0.0
+        pieces = self._chunked(a_map, b_map, pieces)
         (t0, t1), rest = pieces[0], pieces[1:]
 
         def lerp(p, q, t):
             return (p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t)
+        b_now = b_odom
+        if in_odom:
+            tf = self._map_to_odom()
+            if tf is not None:
+                turn = math.atan2(math.sin(tf[2] - yaw0), math.cos(tf[2] - yaw0))
+                dx, dy = b_odom[0] - a_odom[0], b_odom[1] - a_odom[1]
+                b_now = (a_odom[0] + math.cos(turn) * dx - math.sin(turn) * dy,
+                         a_odom[1] + math.sin(turn) * dx + math.cos(turn) * dy)
+                # ⚠️ The re-aimed end IS where this row ends: "chain"
+                # anchoring lays the next row out from it. Leaving the stale
+                # end there put the next row 1 m off (measured, 18 m lawn).
+                if index is not None and index in self._targets:
+                    self._targets[index] = b_now
         heading = math.atan2(b_map.y - a_map.y, b_map.x - a_map.x)
         sx, sy = lerp((a_map.x, a_map.y), (b_map.x, b_map.y), t0)
         piece_start = SimpleNamespace(x=sx, y=sy, yaw=heading)
-        start, end = lerp(a_odom, b_odom, t0), lerp(a_odom, b_odom, t1)
+        start, end = lerp(a_odom, b_now, t0), lerp(a_odom, b_now, t1)
 
         def cut():
             self._cutting = True
             self._publish_status()
             self._send_line(token, start, end,
                             then=(lambda: self._cut_pieces(token, a_map, b_map, a_odom,
-                                                           b_odom, rest)) if rest else None)
+                                                           b_odom, rest, yaw0, index))
+                            if rest else None)
         self._approach(token, piece_start, start, then=cut)
+
+    def _chunked(self, a_map, b_map, pieces):
+        """pieces (fractions along the row) cut to at most max_leg_m each."""
+        limit = self.get_parameter("max_leg_m").value
+        length = math.hypot(b_map.x - a_map.x, b_map.y - a_map.y)
+        if limit <= 0.0 or length <= 0.0 or self._frame == "map":
+            return pieces
+        out = []
+        for t0, t1 in pieces:
+            n = max(1, int(math.ceil((t1 - t0) * length / limit - 1e-9)))
+            out += [(t0 + (t1 - t0) * k / n, t0 + (t1 - t0) * (k + 1) / n) for k in range(n)]
+        return out
 
     def _approach(self, token: int, waypoint, target, then) -> None:
         """Get to `target` (`waypoint` in odom) with the trimmer off, then run
