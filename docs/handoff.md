@@ -651,7 +651,7 @@ kalır ve gerçek yığın her iki dünyada da devrededir.
 > `test_yaw_drifts_without_a_magnetometer` bunu kalıcı olarak belgeliyor.
 
 ## ŞU AN NEREDEYIZ / SIRADAKİ İŞ
-*(son güncelleme: 2026-10-18 — 5. aşama tasarımı + 5a web teleop; 2026-10-16 — görev katmanı 1. aşama; twist_mux (PR #5) ve
+*(son güncelleme: 2026-10-26 — kit soketi K1/K2 + #47/#48; 2026-10-18 — 5. aşama tasarımı + 5a web teleop; 2026-10-16 — görev katmanı 1. aşama; twist_mux (PR #5) ve
 SP3–SP5; altındaki "A5'ten önceki durum" sayıları 2026-09-08'den)*
 
 ### 🆕 Kit soketi — orchadOS tarama kiti (2026-10-25/26): `docs/kit-soketi.md`
@@ -662,14 +662,34 @@ ilk envanter insanla. Tek kaynak kit-soketi.md; burada yalnız durum:
 - ✅ K1 (#42, #43): `robot_kit` paketi (çip, mod, F9P, NTRIP, GPS seçici,
   kamera shim protokolü), görev kapısı + kit kaybında duraklama, web rozeti.
 - ✅ K2a–d (#43–#45): `orchard_grid` görevi; RTK fixed / taze gövde
-  düzeltmesi varken satırlar `map`'te (odom'da pusula hatası 16 m'de 0,8–1 m
-  sapıyordu — ⚠️ NEO-6M ile biçmede bu açık hâlâ var, missions.md); devrilme
-  payı (Gazebo: arka 16,4°, sert kalkışta ön tekerlek kalkıyor); gövdelere
-  göre konum + ağaç denetimi; RTK'sız tarama koridor p95 0,23 m.
-- ✅ 6g (learning.md): 360° kamerayla ağaç etrafı ccw öğrenildi, cw değil.
-- **Kullanıcı kararı bekleyen:** kitli modda ivme limiti (motor yolu).
-- **Bloklu:** gerçek kamera shim'i (Insta360 SDK başlıkları; container
-  rebuild → `~/repos`); gerçek gövde dedektörü; tüm donanım adımları (K3).
+  düzeltmesi varken satırlar `map`'te; devrilme payı (Gazebo: arka 16,4°);
+  gövdelere göre konum + ağaç denetimi; RTK'sız (gövdeli) tarama.
+- ✅ #47: **kitli modda hızlanma rampası** (kullanıcı onayı 2026-10-26): köprü
+  `kit/state` present iken yalnız hızlanmayı `kit_max_linear_accel` 1,5 m/s²
+  ile sınırlıyor, yavaşlama/durma hiç; Gazebo'da basamak kalkışta burun
+  1,25° → 0,06°. **Gerçek Insta360 shim'i** (`robot_kit/shim/`,
+  `scripts/build_camera_shim.sh`; SDK `~/repos`'taki zip, repoya girmez):
+  x86-64'te derlendi, kamera yokken "no camera found"; ⚠️ gerçek kamerayla
+  ve Pi'da hiç koşmadı.
+- ✅ #48: **NEO-6M'de eğik uzun satırlar çözüldü — sebep pusula değil GYRO
+  kaymasıydı** (odom'da düz satır yerde yay; sapma mesafenin karesiyle).
+  4 m'den uzun odom satırları 4 m parçalarla, her parça map→odom yaw'ıyla
+  yeniden yönleniyor; 18 m'de p95 0,86–1,26 → 0,35–0,49 m. ⚠️ Kısa satırlara
+  da uygulayınca kaya çimi %69'a düşüyordu (yalnız uzunlara). CI'a yeni
+  `orchard` aşaması (mission 45 dk'yı aşıyordu). 6g DAgger 1. tur: ağaç
+  etrafı **cw çözüldü** (6 koşunun 5'i).
+- **Kullanıcı kararı (2026-10-26):** RTK'sız gövdeli taramada kenarlardaki
+  kayma (koridor p95 0,23–0,79 m, kararsız) **önemli değil**, EKF ayarı
+  yapılmayacak; testte yalnız ölçülüyor.
+- 6g DAgger 2. tur (2026-10-26): 5 koşu iyi (hata 1,4–4,1 cm), **saha 22 ccw
+  hâlâ gövdeye dayanıyor** — ağacı eğitim dağılımının dışında (yanda, kalın);
+  hedefli sahalar gerekir (learning.md 6g).
+- Açık: orchadOS tarafında çipe manifest
+  yazan araç + test vektörleri (ayrı repo); gerçek gövde dedektörü; tüm
+  donanım adımları (K3, deployment.md Adım 9).
+- ⚠️ **Container rebuild `~/.robot`'u ve /tmp'yi siliyor** (politikalar,
+  bölümler, venv'ler bir kez gitti); veri setleri ve eğitim çıktıları
+  Kaggle'da (`hoverbot-*`) duruyor.
 
 ### 🆕 Görev katmanı (2026-10-16) — tasarım + 1. aşama: `docs/missions.md`
 Kullanıcı istekleri: laptoptan haritada alan seçip **alan kaplama** (çim

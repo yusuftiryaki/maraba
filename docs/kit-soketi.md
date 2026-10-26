@@ -498,10 +498,10 @@ TUSAGA-Aktif ─► ntrip_client ─► kit/gnss/rtcm ─► kit_gnss ─► F9P
     kovaryansla F9P'nin sürüklediği tahmin bir sonraki doğru düzeltmeyi
     "uzak" sayabiliyordu. Yanlış düzeltmeye karşı koruma yerelleştiricinin
     kendi kontrolleri (belirsizlik, artık, aykırı ayıklama).
-  - Kalan açık: kenarda düzeltme yokken F9P'nin çekişi. Asıl çözüm tek
-    noktalı F9P'nin kovaryansını gövde düzeltmeleri varken büyütmek; EKF
-    ayarı olduğu için sonraya bırakıldı. Gerçek bahçeler bu 3×2'den büyük,
-    kenarın payı daha küçük.
+  - Kenarda düzeltme yokken F9P'nin çekişi: çözüm tek noktalı F9P'nin
+    kovaryansını gövde düzeltmeleri varken büyütmek olurdu. **Kullanıcı
+    kararı (2026-10-26): gerek yok**, kenarlardaki kayma önemli değil; EKF
+    ayarı yapılmıyor. Gerçek bahçeler bu 3×2'den büyük, kenarın payı küçük.
 
 ## Açık kalanlar
 
