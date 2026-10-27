@@ -684,8 +684,13 @@ ilk envanter insanla. Tek kaynak kit-soketi.md; burada yalnız durum:
 - 6g DAgger 2. tur (2026-10-26): 5 koşu iyi (hata 1,4–4,1 cm), **saha 22 ccw
   hâlâ gövdeye dayanıyor** — ağacı eğitim dağılımının dışında (yanda, kalın);
   hedefli sahalar gerekir (learning.md 6g).
-- Açık: orchadOS tarafında çipe manifest
-  yazan araç + test vektörleri (ayrı repo); gerçek gövde dedektörü; tüm
+- ✅ orchadOS (2026-10-27): çipe manifest yazan araç (`services/kit-chip`,
+  `orchados-kit write/read/from-calibration`); 3 vektör bayt bayt aynı,
+  yalnız sahte sysfs'te denendi. `calib_id` = orchadOS veritabanının artan,
+  değişmez uint32'si. Belgedeki frame boyutu düzeltildi (25 B, toplam 102 B;
+  #50); plakaya dönme anahtarı şartı eklendi. Soket parçaları seçildi (#51):
+  Binder 09 0132 00 12 (robot) / 99 5129 40 12 (kit), DS2431+.
+- Açık: gerçek gövde dedektörü; tüm
   donanım adımları (K3, deployment.md Adım 9).
 - ⚠️ **Container rebuild `~/.robot`'u ve /tmp'yi siliyor** (politikalar,
   bölümler, venv'ler bir kez gitti); veri setleri ve eğitim çıktıları
