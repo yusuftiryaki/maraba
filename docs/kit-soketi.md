@@ -158,11 +158,21 @@ bağlantılı bir boru yuvası. Paslanmaz ya da alüminyum vida kullanılmalı;
 manyetometrenin yakınında çelik olmamalı. M16 soketi plakanın yanında, kablo
 direğin dibinden iner.
 
+⚠️ **Yuva dönmeye karşı anahtarlı olmalı.** Çipteki kalibrasyon kitin
+tabanına göre ölçülür ve robot onu `kit_mount`'ta (eksenleri `base_link`'le
+aynı: x ileri, y sola, z yukarı) olduğu gibi yayınlar. Yuvarlak bir boru
+yuvasında direk dönebilir ya da ters takılabilir. O zaman kamera ve anten
+frame'leri sessizce yanlış yayınlanır; çip bunu bilemez. Plakada kitin tabanını
+tek bir yönde ve ortalanmış oturtan bir anahtar (pim ya da asimetrik delik
+deseni) olmalı. Biçimi K3'te plaka ile kit tabanı birlikte kesinleşir
+(orchadOS ile ortak).
+
 ## Kimlik çipinin içeriği (manifest)
 
 Kit kendini bu çiple tanıtır. Kitin bilgisayarı açılmadan da okunur, yani v1'de
-de çalışır. Biçim sabit alanlı ikili veri ve CRC'dir; toplam ~90 bayt, DS2431'in
-128 baytına sığar. Alanlar (şema `1`):
+de çalışır. Biçim sabit alanlı ikili veri ve CRC'dir; üç frame'le toplam 102 bayt
+(başlık 6 + sabit alanlar 19 + frame'ler 75 + CRC 2), DS2431'in 128 baytına sığar.
+Bayt düzeni `robot_kit/manifest.py`'nin başında; tablo ile çelişirse kod kazanır. Alanlar (şema `1`):
 
 | Alan | Örnek | Not |
 |---|---|---|
@@ -171,7 +181,7 @@ de çalışır. Biçim sabit alanlı ikili veri ve CRC'dir; toplam ~90 bayt, DS2
 | `serial`, `hw_rev` | `K001`, `1.0` | |
 | `caps` | `gnss_rtk`, `pps`, `cam360`, `cam360_ctrl`, `lidar` | Bit alanı: kitte **takılı** olan donanım. `cam360_ctrl`: kamera USB'den SDK ile sürülebiliyor |
 | `gnss_link` | `usb` (v1) / `ros` (v2) | GNSS robota hangi yoldan geliyor |
-| `calib_id` + dönüşümler | anten, kamera, LiDAR → `kit_mount` | float32 x/y/z/r/p/y. 3 sensör × 24 B = 72 B |
+| `calib_id` + dönüşümler | anten, kamera, LiDAR → `kit_mount` | sensör id (1 B) + float32 x/y/z/r/p/y. 3 sensör × 25 B = 75 B |
 
 - Kalibrasyonun **asıl kaynağı orchadOS'tur.** Kit kalibre edilince orchadOS'taki
   bir araç dönüşümleri ve `calib_id`'yi çipe yazar. Robot kitin frame'lerini
