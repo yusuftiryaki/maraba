@@ -55,6 +55,10 @@ etkilenenler GPS kaynağı, hangi görevlerin kabul edildiği ve kayıt.
 dairesel konnektör**; kitin kablosunun ucunda bunun erkek fişi. Bahçe tozuna
 dayanıklı, vidalı kilitli (sarsıntıda çıkmaz), yaygın ve ucuz. Kablo boyu
 ≤ 1 m, diferansiyel çiftler (USB, Ethernet) bükümlü tel.
+Seçilen parçalar (2026-10-27, `purchase-list.md`): robotta **Binder
+09 0132 00 12** (dişi panel soketi, seri 723), kitte **Binder 99 5129 40 12**
+(erkek kablo fişi, seri 423); ikisi de kontak düzeni 12-a. Fişin kablo
+girişi 4,1–7,8 mm, kontak başına en fazla 0,25 mm².
 
 | # | Sinyal | Yön | v1 | v2 | Not |
 |---|---|---|---|---|---|
