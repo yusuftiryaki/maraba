@@ -1,6 +1,6 @@
 # Alım listesi
 
-*(son güncelleme: 2026-10-16 — sipariş geldi: ST-Link, GY-271, FT232RL)*
+*(son güncelleme: 2026-10-27 — kit soketi parçaları seçildi)*
 
 Elektronik kalemler **tek tedarikçiden** alınacak. Seçilen: **Motorobit**.
 Gerekçesi aşağıda. Fiyat ve stok **doğrulanmadı** — Motorobit sayfaları bunları
@@ -27,6 +27,24 @@ Gelişte doğrulanacaklar:
 
 Aciliyet 1 = yokluğu şu an her şeyi durduruyor. Sipariş tek seferde verildiği
 için hepsi aynı sepete girer.
+
+## Kit soketi (K3) — seçildi, sipariş edilmedi (2026-10-27)
+
+Gerekçe `kit-soketi.md` "Soket — elektrik". İki yarı **aynı üretici ve aynı
+seri**: farklı markaların M16 parçalarının pin düzeni ve kodlaması her zaman
+uymuyor. Binder Motorobit'te yok; RS / Farnell / Mouser ya da Türkiye
+distribütörü. Fiyat ve stok doğrulanmadı.
+
+| Taraf | Kalem | Parça no | Not |
+|---|---|---|---|
+| Robot | M16 dişi panel soketi, 12 kontak, IP67 | **Binder 09 0132 00 12** (seri 723) | Önden montaj, M18×0,75 dişli; lehimli; kontak düzeni **12-a**; 60 V / 3 A. Panel kesiti montaj çiziminden |
+| Robot | 1-Wire pull-up | 4,7 kΩ | `KIT_ID` → 3,3 V; kitte pull-up yok |
+| Kit (orchadOS alır) | M16 erkek kablo fişi, 12 kontak, IP67 | **Binder 99 5129 40 12** (seri 423) | Vidalı kilit; lehimli, en fazla 0,25 mm² (AWG 24); kablo çapı **4,1–7,8 mm** — kitin kablosu bu aralıkta olmalı. Kontak düzeni 12-a |
+| Kit (orchadOS alır) | Kimlik çipi | **DS2431+** (TO-92) | Fişin içinde; veri = pin 3, GND = pin 1 |
+
+- Güç soketten geçmiyor; kontak başına 3 A yeter.
+- ⚠️ Gelince: iki yarının kontak düzeninin (12-a) birbirine uyduğu, takıp
+  süreklilikle pin pin doğrulanır; sonra `wiring-map.md`'ye işlenir.
 
 ## Karar bekleyen
 
