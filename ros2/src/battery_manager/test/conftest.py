@@ -31,7 +31,7 @@ class MonitorHarness:
             [
                 "bash",
                 "-lc",
-                "source /workspaces/hoverboard/ros2/install/setup.bash && exec "
+                "source /workspaces/maraba/ros2/install/setup.bash && exec "
                 + " ".join(command),
             ],
             stdout=subprocess.DEVNULL,

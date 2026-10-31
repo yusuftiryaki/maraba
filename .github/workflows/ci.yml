@@ -86,7 +86,7 @@ jobs:
         with:
           context: .devcontainer
           load: true
-          tags: hoverboard-dev:ci
+          tags: maraba-dev:ci
           cache-from: type=gha,scope=devcontainer
       # The image's user is ubuntu (uid 1000); the checkout belongs to the
       # runner's, and colcon writes build/ and install/ into the tree. Opened
@@ -96,10 +96,10 @@ jobs:
       # --network=host: the same runArgs as devcontainer.json.
       - run: >
           docker run --rm --network=host
-          -v "$PWD:/workspaces/hoverboard" -w /workspaces/hoverboard
-          -e ROS_LOG_DIR=/workspaces/hoverboard/ros2/log/ci/ros
+          -v "$PWD:/workspaces/maraba" -w /workspaces/maraba
+          -e ROS_LOG_DIR=/workspaces/maraba/ros2/log/ci/ros
           -e CI_BAG=1
-          hoverboard-dev:ci ./scripts/ci.sh ${{ matrix.stage }}
+          maraba-dev:ci ./scripts/ci.sh ${{ matrix.stage }}
       # The stacks run with stdout discarded, so on a failure the launch and
       # node logs and the recorded bag (ci.sh, CI_BAG) are the only account of
       # what the processes actually did.

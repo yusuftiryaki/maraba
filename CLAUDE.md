@@ -1,4 +1,4 @@
-# howerboard — hoverboard parçalarından dış mekan otonom yer robotu
+# maraba — hoverboard parçalarından dış mekan otonom yer robotu
 
 ## Dil ve oturum başlangıcı
 - **Kullanıcı Türkçe konuşuyor — her zaman Türkçe yanıt ver.**
