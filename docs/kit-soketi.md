@@ -358,7 +358,7 @@ göre ayarlanması, akünün direk dibinde olması; v2'de Pi 5'in topic sözleş
 
 ## Repolar arası sözleşme
 
-- Asıl kaynak bu belge (`hoverboard/docs/kit-soketi.md`). orchadOS'taki
+- Asıl kaynak bu belge (`maraba/docs/kit-soketi.md`). orchadOS'taki
   `docs/arayuzler.md` bu belgeye bağlantı verir ve uyduğu sürümü yazar.
 - Manifestin ikili formatı **iki repoda** kodlanır: robotta okuyan taraf,
   orchadOS'ta yazan araç. İkisi aynı test vektörlerini (`kit_manifest_v1.json` +

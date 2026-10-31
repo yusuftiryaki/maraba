@@ -1,5 +1,5 @@
 {
-  "name": "howerboard-dev",
+  "name": "maraba-dev",
   "build": { "dockerfile": "Dockerfile" },
   "remoteUser": "ubuntu",
 
