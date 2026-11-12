@@ -550,6 +550,7 @@ olarak yayınlıyor; montaj yönü **URDF'teki `imu_joint` rpy'ında** tarif edi
 
 ### İz B — Donanım (sıra atlanmaz)
 1. **~~ST-Link al~~ (geldi 2026-10-16) → anakartı flash'la** (STM32, EFeru FOC) — **tüm izin kilidi**, en riskli adım
+   — sihirbaz hazır: `./scripts/b1_flash.sh` (2026-11-12; önce `--prova`)
 2. **ESP32 tezgah testi** — protokol + çarpma refleksi gerçek kartla
 3. **Şasi** — en sıkıcı, en uzun
 4. **KALİBRASYON** — `cmd_per_rpm`, `steer_sign`, `invert_left/right`,
@@ -651,8 +652,37 @@ kalır ve gerçek yığın her iki dünyada da devrededir.
 > `test_yaw_drifts_without_a_magnetometer` bunu kalıcı olarak belgeliyor.
 
 ## ŞU AN NEREDEYIZ / SIRADAKİ İŞ
-*(son güncelleme: 2026-10-26 — kit soketi K1/K2 + #47/#48; 2026-10-18 — 5. aşama tasarımı + 5a web teleop; 2026-10-16 — görev katmanı 1. aşama; twist_mux (PR #5) ve
+*(son güncelleme: 2026-11-12 — B1 flash sihirbazı + checklist düzeltmeleri; 2026-10-26 — kit soketi K1/K2 + #47/#48; 2026-10-18 — 5. aşama tasarımı + 5a web teleop; 2026-10-16 — görev katmanı 1. aşama; twist_mux (PR #5) ve
 SP3–SP5; altındaki "A5'ten önceki durum" sayıları 2026-09-08'den)*
+
+### 🆕 B1 flash sihirbazı (2026-11-12): `./scripts/b1_flash.sh`, `tools/b1_flash/`
+B1 donanım darboğazı olduğu için tezgah günü hazırlığı yapıldı (donanıma
+dokunulmadı). Tek kaynak hâlâ `docs/bringup-checklist.md`; sihirbaz onu
+12 adımda yürütür: güvenlik → araçlar → J4 bağlantısı → chipid + **CPUID**
+(0x411FC231 değilse DUR) → RDP unlock (yazılı "SIL" onayı, güç kes-ver,
+`mdw 0x08000000` = ffffffff ile doğrulama) → EFeru klonu → `config.h`
+denetimi/düzeltmesi → derle → flash → UART tel ölçümü (TX'i **yalnız
+dinleyerek** bulur) → tekerlek + **timeout testi** (ölçülür; >1.2 sn = DUR)
+→ rapor (`.b1_flash/`, gitignore'da). `--prova [--otomatik]`: sahte ST-Link +
+sahte kart + sahte zamanla baştan sona prova. 53 test, CI `unit` aşamasında.
+- **Checklist düzeltmeleri (EFeru `main` kaynağı okunarak):** varyant
+  `config.h`'den değil **PlatformIO env'inden** (`-e VARIANT_USART`;
+  `default_envs` hepsi yorumda → env'siz `pio run` 10 varyantı derler);
+  `CTRL_MOD_REQ` varsayılanı **VLT_MODE** (elle SPD_MODE); akım limitleri
+  motor başına → 20 A sigorta için **I_MOT_MAX 8 / I_DC_MAX 10** (kural
+  I_DC = I_MOT + 2); **J4'te NRST yok** — "Connect Under Reset" gerekirse
+  LQFP64 bacak 7'nin izi multimetreyle bulunmalı; "USART3 5V toleranslı"
+  notunun kaynağı yok (doğrulanmadı).
+- **Kaynaktan doğrulanan güvenlik davranışı:** `SERIAL_TIMEOUT 160` (≈0.8 s)
+  dolunca `util.c` OPEN_MODE + komut 0 → tekerlek serbest döner; feedback
+  `cmd1/cmd2` 0'a düşer (sihirbaz bunu ölçer).
+- ⚠️ **`ENABLE_ODOMETRY` açılırsa feedback 18 → 22 bayt** olur ve ESP32
+  `HoverFeedback` bozulur; sihirbaz config'te de UART'ta da yakalar.
+- `config.h` denetimi küçük bir önişlemciyle yapılıyor (HOVERCAR/SKATEBOARD
+  `#undef CTRL_MOD_REQ` yapıyor — ilk `#define`'ı grep'lemek yanlış varyantı
+  okur). Gerçek EFeru `config.h`'ye karşı denendi: uyarısız, beklenen 3 satır.
+- ⚠️ CPUID eşiği (r1p1 = gerçek ST) STM32F10x erratasından; klon ayrımında
+  tek kanıt bu + OpenOCD "UNEXPECTED idcode". Gerçek kartta henüz koşmadı.
 
 ### 🆕 Kit soketi — orchadOS tarama kiti (2026-10-25/26): `docs/kit-soketi.md`
 Kullanıcı istekleri: robot kitsiz bağımsız; kit için hazır soket, takılınca

@@ -34,6 +34,10 @@ cd firmware/esp32_bridge && pio run
 # Simülatörde tüm robot + web arayüzü (tarayıcıda http://localhost:8080/)
 ./scripts/sim_demo.sh [--quiet-gps] [--rock 9,0]
 
+# B1: hoverboard anakartını adım adım flash'lama sihirbazı (docs/bringup-checklist.md'yi yürütür)
+./scripts/b1_flash.sh              # gerçek tezgah; --prova [--otomatik] = sahte donanımla prova
+cd tools/b1_flash && python3 -m pytest test -q
+
 # Pi'a deploy (repo remote'a bağlı olmalı)
 PI_HOST=enes@robot.local ./scripts/deploy.sh
 ```
