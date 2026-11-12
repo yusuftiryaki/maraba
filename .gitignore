@@ -16,3 +16,6 @@ __pycache__/
 # VS Code C++ IntelliSense database — generated, and it reaches 1 GB
 .vscode/browse.vc.db*
 .vscode/
+
+# B1 flash sihirbazının ilerleme durumu ve raporları (scripts/b1_flash.sh)
+.b1_flash/

@@ -5,6 +5,7 @@
 # Usage:   ./scripts/ci.sh <stage>...
 #
 #   unit      every package's tests with NO ROS on the path        (seconds)
+#             + tools/*/test (bench tools, e.g. the B1 flash wizard)
 #   firmware  pio run                                              (~1 min)
 #   stack     colcon build + every test except the four below      (~4 min)
 #   nav2      colcon build + the Nav2 stacks (map pinned, and on GPS) (~7 min)
@@ -58,6 +59,15 @@ stage_unit() {
   for pkg in $(packages_with_tests); do
     echo ">> unit: ${pkg}"
     (cd "${WS}/src/${pkg}" &&
+       env -u PYTHONPATH -u AMENT_PREFIX_PATH \
+         python3 -m pytest test -q -rs -p no:cacheprovider)
+  done
+  # Bench tools outside the ROS workspace (tools/b1_flash: the B1 flash wizard).
+  local tool
+  for tool in "${REPO}"/tools/*/test; do
+    [[ -d "${tool}" ]] || continue
+    echo ">> unit: tools/$(basename "$(dirname "${tool}")")"
+    (cd "$(dirname "${tool}")" &&
        env -u PYTHONPATH -u AMENT_PREFIX_PATH \
          python3 -m pytest test -q -rs -p no:cacheprovider)
   done
