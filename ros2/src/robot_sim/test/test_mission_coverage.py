@@ -89,25 +89,32 @@ class Watcher(Node):
         return False
 
 
-def measure(track, step=0.05):
-    """(coverage, overrun) of the lawn by the CUTTING part of the track."""
+def measure(track, step=0.05, exclude=()):
+    """(coverage, overrun) of the lawn by the CUTTING part of the track.
+
+    exclude: (x, y, r) circles left out of the lawn — both the cut and the
+    total — e.g. the clearance a mission deliberately keeps round a bumper
+    detection, so what is measured is how well it mowed what it meant to."""
     cut = [(x, y) for x, y, c in track if c]
     xs = [LAWN[0][0] + step / 2 + i * step
           for i in range(int((LAWN[1][0] - LAWN[0][0]) / step))]
     ys = [LAWN[0][1] + step / 2 + j * step
           for j in range(int((LAWN[2][1] - LAWN[0][1]) / step))]
     reach = CUT_WIDTH / 2
-    covered = 0
+    covered = total = 0
     for x in xs:
         near = [(px, py) for px, py in cut if abs(px - x) <= reach]
         for y in ys:
+            if any((x - ex) ** 2 + (y - ey) ** 2 <= er * er for ex, ey, er in exclude):
+                continue
+            total += 1
             if any((px - x) ** 2 + (py - y) ** 2 <= reach * reach for px, py in near):
                 covered += 1
     x0, y0 = LAWN[0]
     x1, y1 = LAWN[2]
     overrun = max((math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1))
                    for x, y in cut), default=0.0)
-    return covered / (len(xs) * len(ys)), overrun
+    return covered / max(total, 1), overrun
 
 
 def start_mission(node, mission, timeout_s=30.0):
