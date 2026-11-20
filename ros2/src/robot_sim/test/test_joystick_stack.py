@@ -195,7 +195,10 @@ def test_arming_with_the_stick_pushed_is_refused(watch):
         streamer.join(timeout=2)
     state = watch.state()
     assert state["armed"] is False, state
-    assert state["refusal"] is not None, state
+    # Exactly the stick-pushed refusal, with the link and battery events
+    # having landed — otherwise "not connected" / "low battery" would pass too.
+    assert state["connected"] is True and state["battery"] == 80, state
+    assert state["refusal"] == "çubuk itiliyken etkinleştirilemez", state
     assert not [t for t in watch.joy if t[0] > t0]
     p1 = watch.truth[-1]
     assert math.hypot(p1[1] - p0[1], p1[2] - p0[2]) < 0.02, (p0, p1)
