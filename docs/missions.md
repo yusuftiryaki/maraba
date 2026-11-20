@@ -521,6 +521,9 @@ Tam tasarım ve gerekçeler:
 - `DISARMED` başlar; arka tetik (`BTN_SIDE`) tıklaması etkinleştirir/kapatır.
   Kopuş, 60 s `REL` yokluğu veya pil < %25 → kendiliğinden `DISARMED`;
   çubuk itiliyken etkinleştirme reddedilir; kapanırken önce 2 s sıfır.
+- Pil (BlueZ) her bağlanışta **hemen**, sonra 30 s'de bir okunur (kumandayı
+  kapat-aç düşük pil reddini atlatmasın). Okunamazsa sürüş serbest, rozette
+  `pil ?` uyarısı.
 - Kademeler 0,2 / 0,4 / 0,6 m/s (dönüş 0,4 / 0,7 / 1,0 rad/s), her etkinleştirmede
   en düşük; geri en çok 0,2 m/s.
 - `/cmd_vel_joy` → twist_mux `joystick` (öncelik **110**, web 100'ün üstünde);
@@ -563,6 +566,19 @@ robot yeniden yürür (arada ölü adam durdurmuştur). Sahada gözlenecek.
   dışına yürü → durma mesafesini ölç (hedef < 0,25 m).
 - [ ] 5. Wi-Fi açıkken menzil (Pi 4'te BT ile aynı çip).
 - [ ] 6. Pil `%25` altında etkinleştirme reddi (rozette görünür).
+- [ ] 7. Kumanda **uykuya** düşsün (ya da kapat-aç): robot duruyor mu,
+  rozet "bağlı değil" mi? Uyanınca çubuk itilince robot **kıpırdamamalı** —
+  arka tetikle yeniden etkinleştirme gerekir.
+- [ ] 8. Bilinen davranışı gözle (kısa radyo boşluğu, yukarıda): etkin + çubuk
+  itiliyken kumandayı bir an menzil dışına / gövde arkasına al → ölü adam
+  durduruyor mu, bağlantı Linux cihazı silmeden dönünce robot yeniden yürüyor
+  mu? Gördüğünü buraya yaz.
+- [ ] 9. Her saha gününden önce kumandaya **taze pil** tak (rozette pil %;
+  `pil ?` görünürse pil okunamıyor demektir, düşük pil reddi çalışmaz).
+- [ ] 10. `/proc/bus/input/devices`'ta kumandanın adı `joystick.yaml`
+  `device_name` (`VR-PARK`) ile birebir aynı mı? Tüm tuşlar (`BTN_SIDE`,
+  hız tuşları) `REL` gösteren **aynı** `event` düğümünde mi (`evtest` ile)?
+  Değilse o tuşlar yok sayılır — düğüm yalnız `REL`'li düğümü okur.
 
 ### ✅ 5b: sınır, rota, istasyon, etiketli nokta (2026-10-18)
 "Sür" sekmesinin altında **Öğret**: iz (alan / girilmez / rota) başlat → sür →

@@ -248,6 +248,13 @@ eskisi gibi davranır.
    trust <MAC>        # sonraki açılışlarda kendiliğinden bağlanır
    connect <MAC>
    ```
+   Bulduğun MAC'i **Pi'daki**
+   `ros2/src/robot_bringup/config/joystick.yaml` → `device_mac: "<MAC>"`
+   satırına yaz (büyük/küçük harf fark etmez). Böylece yalnız **bu** kumanda
+   sürer; aynı adlı başka bir cihaz eşleşmez (tasarım kuralı 7: ad + MAC).
+   Repodaki varsayılan `""` (yalnız ad) kalır — bu satır Pi'a özel yerel bir
+   değişiklik; `deploy.sh`'teki `git pull` bu dosya yüzünden reddederse Pi'da
+   `git stash && git pull --ff-only && git stash pop`.
 3. **Kumandayı `@ + D` (fare modu) yap — her açılışta.** Mod hafızası
    ölçülmedi (missions.md kontrol listesi, madde 2). Yanlış modda robot
    kıpırdamaz; durumda `mode_hint: "@+D?"` görünür.
@@ -256,9 +263,12 @@ eskisi gibi davranır.
 5. **Kontrol:** `ros2 topic echo /joy/state --once` → `"connected": true`;
    web başlığında 🎮 rozeti. Sürmek için arka tetiğe (`BTN_SIDE`) tıkla
    (etkinleştir), çubuğu it.
-⚠️ Bağlantı kopunca robot ≤ ~0,3 s içinde durur ama bu Linux'un kopuşu fark
-etmesine **dayanmaz** (BLE supervision timeout 6 s); canlılık kumandanın kendi
-`REL` akışından gelir. Sahada tekerlekler havadayken denemeden yere indirme.
+⚠️ Durma, Linux'un kopuşu fark etmesine **dayanmaz** (BLE supervision timeout
+6 s); canlılık kumandanın kendi `REL` akışından gelir. Simülatörde (en düşük
+kademe, 0,2 m/s) çubuk susunca `/cmd_vel`'deki **ilk sıfır 0,26 s**'de geldi;
+gerçek robotta durma süresi/mesafesi **henüz ölçülmedi** (missions.md 5a-ek
+saha kontrol listesi, madde 3–4). Sahada tekerlekler havadayken denemeden yere
+indirme.
 
 ## Sıra / bağımlılıklar
 1–2 (OS + ROS) donanımdan bağımsız, **hemen yapılabilir**. 3 ROS workspace'i
