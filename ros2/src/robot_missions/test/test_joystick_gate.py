@@ -291,3 +291,25 @@ def test_bad_parameters_raise(kw):
 
 def test_default_clock_is_monotonic():
     assert JoystickGate()._clock is time.monotonic
+
+
+def test_idle_disarm_cannot_be_skipped_by_a_late_rel():
+    g = armed()
+    g.clock.advance(61.0)
+    g.rel("y", -17)                     # no output()/state() poll in between
+    assert g.state()["armed"] is False
+    assert g.output() is None
+
+
+def test_rearm_inside_zero_window_keeps_the_hold():
+    g = armed()
+    g.rel("y", -17)
+    assert g.toggle_arm() is False
+    assert g.output() == (0.0, 0.0)
+    g.clock.advance(0.25)
+    assert g.toggle_arm() is True       # stick released, allowed
+    assert g.output() == (0.0, 0.0)
+    g.clock.advance(1.74)
+    assert g.output() == (0.0, 0.0)
+    g.clock.advance(0.01)
+    assert g.output() is None

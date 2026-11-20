@@ -15,6 +15,8 @@ below the whole safety story of this input:
     armed, all axes stale, within     ZERO — a stick released or a radio
       release_s of the last REL       hiccup stops the robot now
     armed, beyond release_s           None — the mux hands the wheels back
+    armed again inside a disarm's     ZERO until that window ends (a double
+      zero window                       click never hands the wheels back early)
 
 A short radio gap while armed is accepted by design: after a gap the next
 REL resumes driving without re-arming. Anything longer than that is a
@@ -113,6 +115,7 @@ class JoystickGate:
     def rel(self, axis: str, value: int) -> None:
         with self._lock:
             now = self._clock()
+            self._idle_check(now)           # before this REL refreshes the idle timer
             self._last_rel = now
             if self._armed and axis in ("x", "y"):
                 sign = (value > 0) - (value < 0)
@@ -125,6 +128,7 @@ class JoystickGate:
     def connected(self, up: bool) -> None:
         with self._lock:
             now = self._clock()
+            self._idle_check(now)
             if not up and self._armed:
                 self._disarm(now, "bağlantı koptu")
             self._connected = bool(up)
@@ -132,6 +136,7 @@ class JoystickGate:
     def battery(self, pct: Optional[float]) -> None:
         with self._lock:
             now = self._clock()
+            self._idle_check(now)
             self._battery = pct
             if self._armed and self._low_battery():
                 self._disarm(now, "pil düşük")
@@ -152,8 +157,7 @@ class JoystickGate:
                 self._refusal = "çubuk itiliyken etkinleştirilemez"
             else:
                 self._armed, self._armed_at = True, now
-                self._level, self._axis = 0, {}
-                self._zero_until = _NEVER
+                self._level, self._axis = 0, {}     # _zero_until is kept on purpose
                 self._refusal = None
             return self._armed
 
@@ -201,8 +205,6 @@ class JoystickGate:
         self._refusal = reason
 
     def _armed_output(self, now: float) -> Optional[Tuple[float, float]]:
-        if not self._axis:
-            return None
         lin = ang = 0.0
         fresh = False
         for axis, (t, sign) in self._axis.items():
@@ -217,8 +219,10 @@ class JoystickGate:
                 ang = -sign * w * (-1.0 if self.invert_x else 1.0)
         if fresh:
             return lin, ang + 0.0           # + 0.0 turns a -0.0 into 0.0
-        last = max(t for t, _ in self._axis.values())
-        return (0.0, 0.0) if now - last < self.release_s else None
+        last = max((t for t, _ in self._axis.values()), default=_NEVER)
+        if now - last < self.release_s or now < self._zero_until:
+            return (0.0, 0.0)
+        return None
 
     def _output(self, now: float) -> Optional[Tuple[float, float]]:
         self._idle_check(now)
