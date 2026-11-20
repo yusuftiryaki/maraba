@@ -1,6 +1,7 @@
 """twist_mux, exactly as robot.launch.py wires it: teleop outranks Nav2.
 
-    /cmd_vel_teleop (100) ─┐
+    /cmd_vel_joy (110)  ─┐
+    /cmd_vel_teleop (100) ┤
     /cmd_vel_nav_gated (10) ┴─► twist_mux ─► /cmd_vel
 
 Starts robot_bringup's twist_mux.launch.py on its own — the remap and the
@@ -28,6 +29,8 @@ MUX_PATTERN = "lib/twist_mux/twist_mux"
 RATE_HZ = 20.0
 # config/twist_mux.yaml's teleop timeout.
 TELEOP_TIMEOUT_S = 0.5
+# config/twist_mux.yaml's joystick timeout.
+JOYSTICK_TIMEOUT_S = 0.5
 
 NAV_SPEED = 0.3
 TELEOP_SPEED = -0.2
@@ -40,6 +43,7 @@ class MuxPlayer(Node):
         super().__init__("twist_mux_test_player")
         self.teleop = self.create_publisher(Twist, "/cmd_vel_teleop", 10)
         self.nav = self.create_publisher(Twist, "/cmd_vel_nav_gated", 10)
+        self.joy = self.create_publisher(Twist, "/cmd_vel_joy", 10)
         self.received = []          # (monotonic time, linear.x)
         self.create_subscription(
             Twist, "/cmd_vel",
@@ -50,7 +54,7 @@ class MuxPlayer(Node):
         while time.monotonic() < end:
             rclpy.spin_once(self, timeout_sec=0.01)
 
-    def play(self, seconds, nav=None, teleop=None):
+    def play(self, seconds, nav=None, teleop=None, joy=None):
         """Publish the given speeds at RATE_HZ for `seconds` (None = silent).
 
         Returns the monotonic time of the last teleop message sent."""
@@ -59,6 +63,8 @@ class MuxPlayer(Node):
         while time.monotonic() < end:
             if nav is not None:
                 self.nav.publish(Twist(linear=_vec(nav)))
+            if joy is not None:
+                self.joy.publish(Twist(linear=_vec(joy)))
             if teleop is not None:
                 self.teleop.publish(Twist(linear=_vec(teleop)))
                 last_teleop = time.monotonic()
@@ -71,6 +77,7 @@ class MuxPlayer(Node):
         while time.monotonic() < deadline:
             if (self.count_subscribers("/cmd_vel_teleop") and
                     self.count_subscribers("/cmd_vel_nav_gated") and
+                    self.count_subscribers("/cmd_vel_joy") and
                     self.count_publishers("/cmd_vel")):
                 # Matching is per endpoint and asynchronous; let it settle so
                 # the first message is not dropped by a half-made connection.
@@ -78,7 +85,7 @@ class MuxPlayer(Node):
                 return
             self.spin_for(0.1)
         raise AssertionError(
-            "twist_mux never subscribed to both inputs and published /cmd_vel "
+            "twist_mux never subscribed to all three inputs and published /cmd_vel "
             f"(teleop subs {self.count_subscribers('/cmd_vel_teleop')}, nav subs "
             f"{self.count_subscribers('/cmd_vel_nav_gated')}, cmd_vel pubs "
             f"{self.count_publishers('/cmd_vel')}). If the counts are non-zero "
@@ -186,3 +193,31 @@ def test_nav2_gets_the_wheels_back_once_teleop_goes_quiet(player):
     assert TELEOP_TIMEOUT_S - slack <= gap <= TELEOP_TIMEOUT_S + 2 * slack, (
         f"Nav2 resumed {gap:.3f} s after teleop's last message; the mux's "
         f"teleop timeout is {TELEOP_TIMEOUT_S} s")
+
+
+def test_joystick_outranks_web_teleop(player):
+    """The Bluetooth remote (110) is a person holding a deadman button; the
+    web page (100) is a person too, but the one with the stick in hand wins."""
+    player.play(0.5, teleop=TELEOP_SPEED)
+    player.play(1.5, teleop=0.3, joy=0.2)
+    player.spin_for(0.2)
+
+    speeds = [x for _, x in player.received]
+    assert 0.2 in speeds, "the joystick never reached /cmd_vel"
+    after_takeover = speeds[speeds.index(0.2):]
+    assert set(after_takeover) == {0.2}, (
+        f"web teleop was interleaved with the joystick: {after_takeover}")
+
+
+def test_teleop_gets_the_wheels_back_when_the_joystick_goes_quiet(player):
+    player.play(1.0, teleop=0.3, joy=0.2)
+    t_joy_end = time.monotonic()
+    player.play(2.0, teleop=0.3)
+
+    resumed = [t for t, x in player.received if x == 0.3 and t > t_joy_end]
+    assert resumed, "web teleop never got the wheels back"
+    gap = resumed[0] - t_joy_end
+    slack = 1.0 / RATE_HZ + 0.05
+    assert JOYSTICK_TIMEOUT_S - slack <= gap <= JOYSTICK_TIMEOUT_S + 2 * slack, (
+        f"teleop resumed {gap:.3f} s after the joystick's last message; the "
+        f"mux's joystick timeout is {JOYSTICK_TIMEOUT_S} s")

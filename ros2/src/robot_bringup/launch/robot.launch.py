@@ -66,6 +66,7 @@ def generate_launch_description():
     pkg = get_package_share_directory("robot_bringup")
     launch_dir = os.path.join(pkg, "launch")
     bridge_params = os.path.join(pkg, "config", "hoverboard_bridge.yaml")
+    joystick_params = os.path.join(pkg, "config", "joystick.yaml")
 
     use_localization = LaunchConfiguration("use_localization")
     use_gps = LaunchConfiguration("use_gps")
@@ -92,6 +93,8 @@ def generate_launch_description():
     learning_sim = LaunchConfiguration("learning_sim")
     episode_split_s = LaunchConfiguration("episode_split_s")
     use_web = LaunchConfiguration("use_web")
+    use_joystick = LaunchConfiguration("use_joystick")
+    joystick_fake = LaunchConfiguration("joystick_fake")
     use_kit = LaunchConfiguration("use_kit")
     kit_fake_dir = LaunchConfiguration("kit_fake_dir")
     kit_gnss_port = LaunchConfiguration("kit_gnss_port")
@@ -174,6 +177,17 @@ def generate_launch_description():
                         "anyone on the robot's network can start a mission.",
         ),
         DeclareLaunchArgument("web_port", default_value="8080"),
+        DeclareLaunchArgument(
+            "use_joystick", default_value="false",
+            description="Drive with the Bluetooth remote (joystick_teleop, "
+                        "docs/superpowers/specs/2026-11-20-bluetooth-kumanda-design.md). "
+                        "Publishes cmd_vel_joy into twist_mux at priority 110.",
+        ),
+        DeclareLaunchArgument(
+            "joystick_fake", default_value="false",
+            description="Simulator/tests: take events from joystick/fake_events "
+                        "instead of evdev.",
+        ),
         DeclareLaunchArgument(
             "use_learning", default_value="true",
             description="Learning mode (docs/learning.md): episode_recorder + "
@@ -354,6 +368,19 @@ def generate_launch_description():
             parameters=[{"site_file": site_file, "detected_file": detected_file,
                          "port": web_port, "episodes_dir": episodes_dir,
                          "use_sim_time": use_sim_time}],
+        ),
+
+        # The Bluetooth remote. Only ever publishes cmd_vel_joy (twist_mux input
+        # "joystick", priority 110) — never /cmd_vel. Its deadman runs on
+        # wall-clock time, so use_sim_time is deliberately not passed.
+        Node(
+            package="robot_missions",
+            executable="joystick_teleop",
+            name="joystick_teleop",
+            output="screen",
+            condition=IfCondition(use_joystick),
+            parameters=[joystick_params,
+                        {"fake": ParameterValue(joystick_fake, value_type=bool)}],
         ),
 
         # Learning mode: episodes for imitation learning (docs/learning.md).

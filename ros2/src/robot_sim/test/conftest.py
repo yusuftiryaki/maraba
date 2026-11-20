@@ -184,6 +184,8 @@ STACK_PATTERNS = (
     "lib/robot_missions/jam_monitor",
     # holds the web port: an orphan makes the next web test bind fail
     "lib/robot_missions/web_ui",
+    # publishes cmd_vel_joy at priority 110: an orphan would out-drive the next stack
+    "lib/robot_missions/joystick_teleop",
     # publishes /detected_dock_pose from the camera
     "image_proc/track_marker_node",
     # learning mode: an orphan recorder would keep writing a bag forever
@@ -524,6 +526,14 @@ class WebStack(SiteStack):
     WEB_ARGS = ("use_web:=true", f"web_port:={WEB_PORT}")
 
 
+class JoystickStack(WebStack):
+    """WebStack with the Bluetooth remote node in fake mode: events arrive on
+    joystick/fake_events instead of evdev."""
+
+    def launch_args(self):
+        return (*super().launch_args(), "use_joystick:=true", "joystick_fake:=true")
+
+
 class LearningStack(WebStack):
     """WebStack with learning mode on, episodes in the test's own directory,
     bags split every SPLIT_S so a crash test has closed splits to recover."""
@@ -559,6 +569,20 @@ def web_stack(ros, tmp_path):
 
     def _make(features, *sim_args):
         stack = WebStack(str(tmp_path), features, *sim_args)
+        made.append(stack)
+        return stack
+
+    yield _make
+    for stack in made:
+        stack.close()
+
+
+@pytest.fixture
+def joystick_stack(ros, tmp_path):
+    made = []
+
+    def _make(features, *sim_args):
+        stack = JoystickStack(str(tmp_path), features, *sim_args)
         made.append(stack)
         return stack
 

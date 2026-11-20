@@ -1,6 +1,7 @@
 # twist_mux — the ONE publisher of /cmd_vel when robot.launch.py runs.
 #
-#   teleop ───────────────────────────────────────► /cmd_vel_teleop     (100) ─┐
+#   joystick (Bluetooth remote, joystick_teleop) ─► /cmd_vel_joy        (110) ─┐
+#   teleop ───────────────────────────────────────► /cmd_vel_teleop     (100) ─┤
 #   controller_server, behavior_server ─► /cmd_vel_nav ─► nav_cmd_gate          ├─► twist_mux ─► /cmd_vel ─► hoverboard_bridge
 #                                                  ─► /cmd_vel_nav_gated  (10) ─┘
 #
@@ -36,6 +37,15 @@ twist_mux:
     use_stamped: false
 
     topics:
+      # The Bluetooth remote (joystick_teleop): a person with a deadman button
+      # in hand outranks the web page. The node only publishes while armed and
+      # the stick is fresh (its own deadman is 0.25 s); this 0.5 s timeout
+      # matches the bridge's, so the wheels go back to teleop/Nav2 exactly
+      # when they would have stopped anyway. It never writes /cmd_vel itself.
+      joystick:
+        topic: cmd_vel_joy
+        timeout: 0.5
+        priority: 110
       # A human at the keyboard / joystick. Must outrank everything autonomous.
       teleop:
         topic: cmd_vel_teleop
