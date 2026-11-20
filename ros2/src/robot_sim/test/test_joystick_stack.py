@@ -11,7 +11,6 @@ the node from MARABA_JOYSTICK_MAC (the Pi sets it in ~/robot.env).
 
 import json
 import math
-import subprocess
 import threading
 import time
 import urllib.request
@@ -23,6 +22,7 @@ pytest.importorskip("rclpy", reason="ROS 2 not sourced")
 import rclpy                                            # noqa: E402
 from geometry_msgs.msg import Twist                     # noqa: E402
 from nav_msgs.msg import Odometry                       # noqa: E402
+from rcl_interfaces.srv import GetParameters            # noqa: E402
 from rclpy.executors import SingleThreadedExecutor      # noqa: E402
 from std_msgs.msg import String                         # noqa: E402
 
@@ -252,6 +252,13 @@ def test_arming_with_the_stick_pushed_is_refused(watch):
 def test_device_mac_comes_from_the_environment(watch):
     """The MAC is per-robot and never in a tracked file (a Pi-side edit made
     deploy.sh's git pull refuse): MARABA_JOYSTICK_MAC reaches the node."""
-    out = subprocess.run(["ros2", "param", "get", "/joystick_teleop", "device_mac"],
-                         capture_output=True, text=True, timeout=30)
-    assert out.stdout.strip() == f"String value is: {REMOTE_MAC}", out
+    # The node's own parameter service, not `ros2 param get`: the CLI's graph
+    # discovery can miss a live node on a cold CI runner ("Node not found").
+    client = watch.node.create_client(GetParameters, "/joystick_teleop/get_parameters")
+    assert client.wait_for_service(timeout_sec=20.0), "no /joystick_teleop/get_parameters"
+    future = client.call_async(GetParameters.Request(names=["device_mac"]))
+    deadline = time.monotonic() + 10.0
+    while not future.done() and time.monotonic() < deadline:
+        time.sleep(0.05)                    # watch's executor thread spins the node
+    assert future.done(), "get_parameters did not answer"
+    assert future.result().values[0].string_value == REMOTE_MAC, future.result()
