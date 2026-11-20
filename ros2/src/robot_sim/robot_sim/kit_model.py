@@ -51,7 +51,8 @@ class Mass:
 ROBOT = (Mass("chassis", 12.0, 0.11, 0.0, 0.1425),
          Mass("left_wheel", 2.5, 0.0, 0.25, 0.0825),
          Mass("right_wheel", 2.5, 0.0, -0.25, 0.0825))
-# docs/kit-soketi.md: ~4.5 kg, battery at the mast's foot -> CoM ~0.9 m up.
+# docs/kit-soketi.md: ~4.5 kg, battery at the mast's foot -> CoM ~0.9 m up
+# (estimated for the 2.1 m mast; the 1.7 m one is lower, so this stays pessimistic).
 KIT_MASS_KG = 4.5
 KIT_COM_Z = 0.9
 KIT_MOUNT = (0.11, 0.0)           # robot.urdf.xacro kit_mount
@@ -113,7 +114,7 @@ def margins(masses: Sequence[Mass], support: Sequence[XY] = URDF_SUPPORT) -> Dic
 
 def kit_sdf(base: str, kg: float = KIT_MASS_KG, com_z: float = KIT_COM_Z,
             mount: XY = KIT_MOUNT, urdf_casters: bool = True,
-            mast_height: float = 2.1) -> str:
+            mast_height: float = 1.7) -> str:
     """hoverbot.sdf with the kit on its plate: a mast link (its mass at
     `com_z` above the ground, its collision a thin cylinder up to
     `mast_height`), fixed to base_link; the casters re-seated in the URDF's
@@ -137,7 +138,7 @@ def kit_sdf(base: str, kg: float = KIT_MASS_KG, com_z: float = KIT_COM_Z,
         text = _replace_pose(text, "caster_rear", "0.22 -0.15 -0.135 0 0 0")
         text = _replace_pose(text, "caster_rear_visual", "0.22 -0.15 -0.135 0 0 0")
     # A rod's inertia about its CoM, mast-like: most of the mass low (battery),
-    # the rest spread up the mast — a 2 m rod of the whole mass is the
+    # the rest spread up the mast — a mast-long rod of the whole mass is the
     # pessimistic bound and is what is used.
     ixx = kg * mast_height ** 2 / 12.0
     # a thin rod spins easily about its own axis; and izz must stay within
