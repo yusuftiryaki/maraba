@@ -555,6 +555,11 @@ başlangıç, yeniden üretilemedi; hata mesajı artık zaman çizelgesi basıyo
 **Bilinen davranış:** fare modunda "çubuk ortada" ile "6 s'den kısa kopuş"
 ayırt edilemez; Linux cihazı silmezse düğüm `ARMED` kalır ve çubuk hâlâ itiliyorsa
 robot yeniden yürür (arada ölü adam durdurmuştur). Sahada gözlenecek.
+Pil açısından bu durum güvenli tarafta: Linux cihazı geç silse (ya da hiç
+silmese) bile BlueZ'in `Battery1`'i düşürmesiyle başarısız olan **periyodik**
+okuma "bilinmiyor" yazmaz, kapı son bilinen pili tutar (bilinen-düşük pil
+kopuşla "bilinmiyor, izinli"ye dönmez). "Bilinmiyor" yalnız bağlanma sonrası
+3 deneme de başarısızsa yazılır.
 
 **Saha kontrol listesi** (Pi, kumanda eşleşmiş, `use_joystick:=true`):
 - [ ] 1. Fare modunda `A B C D` ve iki tetiğin `evtest` kodlarını ölç →
@@ -576,7 +581,9 @@ robot yeniden yürür (arada ölü adam durdurmuştur). Sahada gözlenecek.
 - [ ] 9. Her saha gününden önce kumandaya **taze pil** tak (rozette pil %;
   `pil ?` görünürse pil okunamıyor demektir, düşük pil reddi çalışmaz).
 - [ ] 10. `/proc/bus/input/devices`'ta kumandanın adı `joystick.yaml`
-  `device_name` (`VR-PARK`) ile birebir aynı mı? Tüm tuşlar (`BTN_SIDE`,
+  `device_name` (`VR-PARK`) ile birebir aynı mı? `Uniq=` satırı
+  `~/robot.env`'deki `MARABA_JOYSTICK_MAC` ile aynı mı
+  (`ros2 param get /joystick_teleop device_mac`)? Tüm tuşlar (`BTN_SIDE`,
   hız tuşları) `REL` gösteren **aynı** `event` düğümünde mi (`evtest` ile)?
   Değilse o tuşlar yok sayılır — düğüm yalnız `REL`'li düğümü okur.
 

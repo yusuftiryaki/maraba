@@ -10,6 +10,11 @@ Type=simple
 User=enes
 # donanım hazır olsun diye küçük gecikme
 ExecStartPre=/bin/sleep 5
+# Per-robot values that must not live in the repo (a tracked file edited on
+# the Pi makes deploy.sh's `git pull --ff-only` refuse). Optional: the leading
+# "-" means a missing file is fine. Today: MARABA_JOYSTICK_MAC=<remote's MAC>
+# (docs/deployment.md Adım 10). bash -lc below inherits it.
+EnvironmentFile=-/home/enes/robot.env
 # site_file: the site (docs/missions.md) — the web page (http://<robot>:8080/)
 # edits it; the file does not have to exist yet, the first save creates it.
 # Missions, the survey map and home all come from it. ⚠️ Without it the robot

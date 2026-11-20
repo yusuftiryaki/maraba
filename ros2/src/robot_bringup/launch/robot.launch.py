@@ -57,7 +57,8 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import (EnvironmentVariable, LaunchConfiguration,
+                                  PythonExpression)
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -95,6 +96,7 @@ def generate_launch_description():
     use_web = LaunchConfiguration("use_web")
     use_joystick = LaunchConfiguration("use_joystick")
     joystick_fake = LaunchConfiguration("joystick_fake")
+    joystick_mac = LaunchConfiguration("joystick_mac")
     use_kit = LaunchConfiguration("use_kit")
     kit_fake_dir = LaunchConfiguration("kit_fake_dir")
     kit_gnss_port = LaunchConfiguration("kit_gnss_port")
@@ -187,6 +189,15 @@ def generate_launch_description():
             "joystick_fake", default_value="false",
             description="Simulator/tests: take events from joystick/fake_events "
                         "instead of evdev.",
+        ),
+        DeclareLaunchArgument(
+            "joystick_mac",
+            default_value=EnvironmentVariable("MARABA_JOYSTICK_MAC", default_value=""),
+            description="The paired remote's MAC (spec rule 7: name + MAC). A "
+                        "per-robot value, so it is NOT kept in the repo: on the Pi it "
+                        "comes from MARABA_JOYSTICK_MAC in ~/robot.env "
+                        "(deploy/robot.service EnvironmentFile, docs/deployment.md "
+                        "Adım 10). Empty = match by device_name alone.",
         ),
         DeclareLaunchArgument(
             "use_learning", default_value="true",
@@ -380,7 +391,8 @@ def generate_launch_description():
             output="screen",
             condition=IfCondition(use_joystick),
             parameters=[joystick_params,
-                        {"fake": ParameterValue(joystick_fake, value_type=bool)}],
+                        {"fake": ParameterValue(joystick_fake, value_type=bool),
+                         "device_mac": ParameterValue(joystick_mac, value_type=str)}],
         ),
 
         # Learning mode: episodes for imitation learning (docs/learning.md).

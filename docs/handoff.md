@@ -674,6 +674,16 @@ için Linux kopuşuna güvenilmez). Simülatörde: 0,2 m/s'de çubuk susunca ilk
   assert'i 14 koşuda 1 kez düştü (soğuk başlangıç, yeniden üretilemedi; hata
   artık zaman çizelgesi basıyor) — tekrarlarsa araştır. (5) **B1 flash hâlâ
   donanım darboğazı**; kumanda ondan bağımsız, ama gerçek tekerlek testi B1'e bağlı.
+- **Kapatılan takip işleri (birleştirme öncesi):** (a) `BatteryPoller`
+  kaçan-kick yarışı: zaman aşımında `_wake` artık temizlenmiyor. (b) Periyodik
+  pil okuması başarısız olursa NaN yazılmıyor, son okuma korunuyor (BLE
+  kopuşunda bilinen-düşük pil "bilinmiyor"a dönmesin; bu, Linux evdev düğümünü
+  geç silse bile pil bypass'ını kapatır). (c) Kumanda MAC'i artık repoda değil:
+  Pi'da `~/robot.env` → `MARABA_JOYSTICK_MAC`, `robot.service`
+  `EnvironmentFile`, `robot.launch.py` `joystick_mac` (Pi'da bir kez
+  `install_service.sh`). (d) BlueZ HoG'un kopuşta düğümü silip silmediği
+  hâlâ **sahada** gözlenecek (missions.md madde 7–8); artık yalnız `ARMED`
+  kalma davranışını etkiliyor, pili değil.
 
 ### 🆕 B1 flash sihirbazı (2026-11-12): `./scripts/b1_flash.sh`, `tools/b1_flash/`
 B1 donanım darboğazı olduğu için tezgah günü hazırlığı yapıldı (donanıma

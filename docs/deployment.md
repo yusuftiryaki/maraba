@@ -248,13 +248,20 @@ eskisi gibi davranır.
    trust <MAC>        # sonraki açılışlarda kendiliğinden bağlanır
    connect <MAC>
    ```
-   Bulduğun MAC'i **Pi'daki**
-   `ros2/src/robot_bringup/config/joystick.yaml` → `device_mac: "<MAC>"`
-   satırına yaz (büyük/küçük harf fark etmez). Böylece yalnız **bu** kumanda
-   sürer; aynı adlı başka bir cihaz eşleşmez (tasarım kuralı 7: ad + MAC).
-   Repodaki varsayılan `""` (yalnız ad) kalır — bu satır Pi'a özel yerel bir
-   değişiklik; `deploy.sh`'teki `git pull` bu dosya yüzünden reddederse Pi'da
-   `git stash && git pull --ff-only && git stash pop`.
+   Bulduğun MAC'i Pi'da **`~/robot.env`** dosyasına yaz (büyük/küçük harf
+   fark etmez):
+   ```
+   echo 'MARABA_JOYSTICK_MAC=<MAC>' >> ~/robot.env
+   ```
+   Böylece yalnız **bu** kumanda sürer; aynı adlı başka bir cihaz eşleşmez
+   (tasarım kuralı 7: ad + MAC). `robot.service` bu dosyayı
+   `EnvironmentFile=-/home/enes/robot.env` ile okur, `robot.launch.py`'nin
+   `joystick_mac` argümanı varsayılanını oradan alır. MAC repoda hiçbir
+   dosyada durmaz, o yüzden `deploy.sh`'teki `git pull` hiçbir yerel
+   değişikliğe takılmaz. **Repodaki dosyaları (`joystick.yaml`) Pi'da
+   düzenleme.** Servis dosyası bu satırla güncellendi: Pi'da bir kez
+   `./scripts/install_service.sh` çalıştır. Dosya yoksa ya da satır boşsa
+   kumanda yalnız adıyla eşleşir (eski davranış).
 3. **Kumandayı `@ + D` (fare modu) yap — her açılışta.** Mod hafızası
    ölçülmedi (missions.md kontrol listesi, madde 2). Yanlış modda robot
    kıpırdamaz; durumda `mode_hint: "@+D?"` görünür.

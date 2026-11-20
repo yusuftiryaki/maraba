@@ -4,12 +4,14 @@ joystick_teleop runs in fake mode (events on joystick/fake_events, the same
 JSON the evdev source would produce), and everything behind it is real:
 twist_mux, the bridge, the simulated robot. The claims: the remote drives the
 robot through the mux; silence stops it within the deadman (0.25 s) plus the
-bridge's margin; a dropped link stops it and the stick must be re-armed; and
-arming with the stick already pushed is refused.
+bridge's margin; a dropped link stops it and the stick must be re-armed;
+arming with the stick already pushed is refused; and the per-robot MAC reaches
+the node from MARABA_JOYSTICK_MAC (the Pi sets it in ~/robot.env).
 """
 
 import json
 import math
+import subprocess
 import threading
 import time
 import urllib.request
@@ -36,6 +38,7 @@ def api_status():
     with urllib.request.urlopen(BASE + "/api/status", timeout=10) as response:
         return json.loads(response.read())
 RELEASE_S = 2.0
+REMOTE_MAC = "7F:AB:6E:93:C4:30"
 
 
 class JoyWatcher:
@@ -111,7 +114,11 @@ class JoyWatcher:
 
 
 @pytest.fixture
-def watch(joystick_stack):
+def watch(joystick_stack, monkeypatch):
+    # The Pi's path for the per-robot MAC: ~/robot.env -> robot.service's
+    # EnvironmentFile -> robot.launch.py's joystick_mac default. Fake mode
+    # ignores the MAC, so this changes nothing else.
+    monkeypatch.setenv("MARABA_JOYSTICK_MAC", REMOTE_MAC)
     joystick_stack([], *QUIET_GPS)
     w = JoyWatcher()
     try:
@@ -240,3 +247,11 @@ def test_arming_with_the_stick_pushed_is_refused(watch):
     assert not [t for t in watch.joy if t[0] > t0]
     p1 = watch.truth[-1]
     assert math.hypot(p1[1] - p0[1], p1[2] - p0[2]) < 0.02, (p0, p1)
+
+
+def test_device_mac_comes_from_the_environment(watch):
+    """The MAC is per-robot and never in a tracked file (a Pi-side edit made
+    deploy.sh's git pull refuse): MARABA_JOYSTICK_MAC reaches the node."""
+    out = subprocess.run(["ros2", "param", "get", "/joystick_teleop", "device_mac"],
+                         capture_output=True, text=True, timeout=30)
+    assert out.stdout.strip() == f"String value is: {REMOTE_MAC}", out
