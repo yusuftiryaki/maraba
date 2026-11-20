@@ -130,7 +130,8 @@ def test_the_real_profile_loads_and_records_the_action_labels():
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(here, "..", "..", "robot_bringup", "config", "learning_topics.yaml")
     topics = load_profile(path, sim=True)
-    for needed in ("/cmd_vel_teleop", "/cmd_vel_nav", "/cmd_vel", "/teleop/state", "/odom",
+    for needed in ("/cmd_vel_teleop", "/cmd_vel_joy", "/joy/state", "/cmd_vel_nav", "/cmd_vel",
+                   "/teleop/state", "/odom",
                    "/joint_states", "/camera/jpeg", "/tf", "/tf_static", "/learning/marker",
                    "/robot_description", "/ground_truth"):
         assert needed in topics, needed

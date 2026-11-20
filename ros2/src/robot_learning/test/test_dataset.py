@@ -62,6 +62,25 @@ def test_teleop_outranks_nav_like_the_mux():
     assert f.action[4].tolist() == [-0.2, 0.0] and f.action[1].tolist() == [0.5, 0.0]
 
 
+def test_joystick_frames_are_a_person_driving():
+    f = frames(joystick=[(100.05 + 0.1 * k, 0.2, 0.0) for k in range(10)])
+    assert set(f.action_source[:10]) == {SOURCES.index("joystick")} == {3}
+    assert f.teleop[:10].all()
+    assert f.action[2].tolist() == [0.2, 0.0]
+
+
+def test_joystick_wins_over_web_teleop_when_both_fresh():
+    f = frames(joystick=[(100.05 + 0.1 * k, 0.2, 0.0) for k in range(10)],
+               teleop=[(100.05 + 0.1 * k, -0.4, 0.0) for k in range(10)])
+    assert set(f.action_source[:10]) == {3}
+    assert f.action[3].tolist() == [0.2, 0.0]
+    assert f.teleop[:10].all()
+
+
+def test_old_source_indices_unchanged():
+    assert SOURCES[:3] == ("none", "teleop", "nav")
+
+
 def test_executed_is_kept_apart_from_the_label():
     # The bumper vetoed: the person asked 0.3, the bridge got 0.
     f = frames(teleop=[(100.15, 0.3, 0.0)], executed=[(100.16, 0.0, 0.0)])

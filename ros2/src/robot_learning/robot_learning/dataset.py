@@ -9,14 +9,16 @@ this turns them into one row per frame at `fps`:
     action     the command given in (t_k, t_k + 1/fps]: what was done in
                answer to observation k — and if none came in that interval,
                the latest one still in force
-    source     who gave it: teleop if a /cmd_vel_teleop is fresh (twist_mux's
-               0.5 s), else nav if a /cmd_vel_nav is fresh, else none (= 0)
+    source     who gave it: joystick if a /cmd_vel_joy is fresh (twist_mux's
+               0.5 s), else teleop if a /cmd_vel_teleop is fresh, else nav if
+               a /cmd_vel_nav is fresh, else none (= 0). "joystick" is appended
+               last so the indices of older exported episodes stay valid.
 
 Three action columns are kept apart on purpose (learning.md decision 3):
 `action` (the label above), `action_expert` (the simulator's privileged
 expert, NaN where it said nothing — 6a), `action_executed` (/cmd_vel: what reached the
 bridge after mux, gate and locks) — and `teleop` marks the frames where a
-person held the wheels; in an "intervention" episode those are DAgger's data.
+person held the wheels (web teleop or the Bluetooth remote); in an "intervention" episode those are DAgger's data.
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 FRESH_S = 0.5                    # twist_mux's input timeout (config/twist_mux.yaml)
-SOURCES = ("none", "teleop", "nav")
+SOURCES = ("none", "teleop", "nav", "joystick")
 
 # The state vector, in this order. A missing series is NaN (never 0: a zero
 # battery or speed is a fact, an unrecorded one is not).
@@ -108,6 +110,7 @@ def build_frames(series: Dict[str, Series], images: Series, fps: float, t0: floa
     image_index = np.full(n, -1, dtype=np.int64)
     image_age = np.full(n, np.nan)
     teleop, nav = series.get("teleop", Series()), series.get("nav", Series())
+    joystick = series.get("joystick", Series())
     cmd = series.get("executed", Series())
     expert = series.get("expert", Series())
     for k, t in enumerate(times):
@@ -118,8 +121,11 @@ def build_frames(series: Dict[str, Series], images: Series, fps: float, t0: floa
             if found is not None:
                 state[k, column:column + width] = s.values[found[0]][:width]
             column += width
+        pushed = _command(joystick, t, t + dt)
         held = _command(teleop, t, t + dt)
-        if held is not None:
+        if pushed is not None:
+            action[k], source[k], teleop_held[k] = pushed, SOURCES.index("joystick"), True
+        elif held is not None:
             action[k], source[k], teleop_held[k] = held, 1, True
         else:
             proposed = _command(nav, t, t + dt)
