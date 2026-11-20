@@ -313,3 +313,17 @@ def test_rearm_inside_zero_window_keeps_the_hold():
     assert g.output() == (0.0, 0.0)
     g.clock.advance(0.01)
     assert g.output() is None
+
+
+def test_known_low_battery_survives_a_reconnect(gate):
+    """Remote off/on: the last low reading still refuses until a new one
+    (BatteryPoller reads right after the connect and never polls while
+    disconnected, so nothing turns it into "unknown" meanwhile)."""
+    gate.connected(True)
+    gate.battery(20.0)
+    gate.connected(False)
+    gate.connected(True)
+    assert gate.toggle_arm() is False
+    assert gate.state()["refusal"] == "pil düşük"
+    gate.battery(90.0)                      # fresh batteries, the connect poll
+    assert gate.toggle_arm() is True

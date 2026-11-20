@@ -173,13 +173,21 @@ def test_joystick_drives_and_silence_stops_it(watch):
 def test_disconnect_mid_drive_stops_and_reconnect_needs_rearm(watch):
     watch.arm()
     t_arm = time.monotonic()
+    # Preconditions: armed, and actually driving through the mux when the
+    # link drops — otherwise the "stops" assert below proves nothing.
+    assert watch.state()["armed"] is True, watch.state()
     watch.stick(-17, 1.5)
     t_drop = watch.send("connected", value=0)
+    driving = [c for c in watch.cmd if t_arm < c[0] < t_drop and c[1] != 0.0]
+    assert driving, f"never drove before the drop{timeline(watch, t_drop)}"
     time.sleep(0.5)
     zero = next((c for c in watch.cmd if c[0] > t_drop and c[1] == 0.0), None)
+    joy_zero = next((c for c in watch.joy if c[0] > t_drop and c[1] == 0.0), None)
     assert zero is not None and zero[0] - t_drop < 0.15, (
-        f"no zero within 0.15 s of the link dropping ({zero}); armed at "
-        f"{t_arm - t_drop:+.3f}{timeline(watch, t_drop)}")
+        f"no zero within 0.15 s of the link dropping (/cmd_vel {zero}, "
+        f"/cmd_vel_joy first zero at "
+        f"{'never' if joy_zero is None else f'{joy_zero[0] - t_drop:+.3f}'}); "
+        f"armed at {t_arm - t_drop:+.3f}{timeline(watch, t_drop)}")
     assert watch.state()["armed"] is False, watch.state()
 
     # The gate holds zeros for release_s after a disarm (the wheels stay

@@ -471,11 +471,16 @@ function showJoystick(j) {
   if (!j.connected) { cls = "joy-off"; text = "🎮 bağlı değil"; }
   else if (!j.armed) { cls = "joy-idle"; text = "🎮 kapalı"; }
   else { cls = "joy-armed"; text = `🎮 etkin · kademe ${j.speed_level}`; }
+  const tips = [];
   if (j.battery !== null && j.battery !== undefined) {
     text += ` · pil %${Math.round(j.battery)}`;
     if (j.battery < JOY_LOW_BATTERY_PCT) cls += " joy-low";
+  } else if (j.connected) {
+    // Unknown battery means the low-battery refusal cannot work (spec rule 6).
+    text += " · pil ?";
+    cls += " joy-unknown";
+    tips.push("pil okunamıyor — düşük pil reddi çalışmıyor");
   }
-  const tips = [];
   if (j.refusal) tips.push(j.refusal);
   if (j.mode_hint === "@+D?") tips.push("kumanda fare modunda değil (@ + D)");
   box.className = cls;

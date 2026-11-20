@@ -6,6 +6,10 @@
     joystick/fake_events (in)  fake:=true only — JSON {"kind","code","value"};
                                evdev is never touched, battery is not polled
 
+Real mode imports evdev at startup (a missing python3-evdev stops the node
+with a clear log line) and reads the battery right after every connect,
+then every battery_poll_s (BatteryPoller).
+
 All events go through apply_event. The gate clock is time.monotonic, also
 when use_sim_time is true: the deadman lives in the human's time.
 """
@@ -13,8 +17,6 @@ when use_sim_time is true: the deadman lives in the human's time.
 from __future__ import annotations
 
 import json
-import math
-import threading
 import time
 
 import rclpy
@@ -25,7 +27,7 @@ from std_msgs.msg import String
 
 from robot_missions.joystick_gate import (Buttons, JoyEvent, JoystickGate,
                                           apply_event)
-from robot_missions.joystick_source import (EvdevSource, bluez_battery,
+from robot_missions.joystick_source import (BatteryPoller, EvdevSource,
                                            parse_fake_event)
 
 class JoystickTeleop(Node):
@@ -66,19 +68,28 @@ class JoystickTeleop(Node):
 
         self._source = None
         self._poller = None
-        self._closing = threading.Event()
         if self._fake:
             self.create_subscription(String, "joystick/fake_events",
                                      self._on_fake, 10)
         else:
-            self._source = EvdevSource(g("device_name"), g("device_mac"),
-                                       self._emit, log=self.get_logger().warning)
-            self._source.start()
+            self._source = EvdevSource(
+                g("device_name"), g("device_mac"), self._on_source_event,
+                log=self.get_logger().warning,
+                buttons=(self._buttons.arm, self._buttons.speed_up,
+                         self._buttons.speed_down))
             # Off the executor: busctl can take up to 2 s, which would stall
             # the 20 Hz cmd_vel_joy tick and let twist_mux drop the joystick.
-            self._poll_s = float(g("battery_poll_s"))
-            self._poller = threading.Thread(target=self._poll_loop,
-                                            name="joy-battery", daemon=True)
+            self._poller = BatteryPoller(
+                lambda: self._source.mac, self._emit,
+                period_s=float(g("battery_poll_s")),
+                log=self.get_logger().warning)
+            try:
+                self._source.start()
+            except ImportError as e:
+                self.get_logger().fatal(
+                    f"python3-evdev is missing ({e!r}): sudo apt install "
+                    "python3-evdev, or run with fake:=true")
+                raise
             self._poller.start()
 
     def _emit(self, event: JoyEvent) -> None:
@@ -87,6 +98,11 @@ class JoystickTeleop(Node):
         except Exception as e:
             self.get_logger().error(f"event dropped: {e!r}")
 
+    def _on_source_event(self, event: JoyEvent) -> None:
+        self._emit(event)
+        if self._poller is not None:
+            self._poller.on_event(event)        # a connect reads the battery now
+
     def _on_fake(self, msg: String) -> None:
         try:
             event = parse_fake_event(msg.data)
@@ -94,17 +110,6 @@ class JoystickTeleop(Node):
             self.get_logger().warning(f"bad fake event dropped: {e!r}")
             return
         self._emit(event)
-
-    def _poll_loop(self) -> None:
-        while not self._closing.wait(self._poll_s):
-            self._poll_battery()
-
-    def _poll_battery(self) -> None:
-        mac = self._source.mac if self._source else None
-        if not mac:
-            return
-        pct = bluez_battery(mac)
-        self._emit(JoyEvent("battery", "", math.nan if pct is None else pct))
 
     def _tick(self) -> None:
         out = self._gate.output()
@@ -118,11 +123,19 @@ class JoystickTeleop(Node):
         self._state_pub.publish(String(data=json.dumps(self._gate.state())))
 
     def close(self) -> None:
-        self._closing.set()
         if self._poller is not None:
-            self._poller.join(timeout=3.0)
+            self._poller.stop()
         if self._source is not None:
             self._source.stop()
+        # Best effort: if the gate still wants the wheels (driving, or a
+        # zero window), leave one zero behind rather than the last command.
+        # twist_mux's 0.5 s timeout and the bridge's cmd_timeout stop the
+        # robot anyway; the context may already be shut down here.
+        try:
+            if self._gate.output() is not None:
+                self._pub.publish(Twist())
+        except Exception:
+            pass
 
 
 def main(args=None) -> None:

@@ -37,11 +37,16 @@ twist_mux:
     use_stamped: false
 
     topics:
-      # The Bluetooth remote (joystick_teleop): a person with a deadman button
-      # in hand outranks the web page. The node only publishes while armed and
-      # the stick is fresh (its own deadman is 0.25 s); this 0.5 s timeout
-      # matches the bridge's, so the wheels go back to teleop/Nav2 exactly
-      # when they would have stopped anyway. It never writes /cmd_vel itself.
+      # The Bluetooth remote (joystick_teleop): a person with the remote in
+      # hand outranks the web page. Silent while disarmed. While armed it
+      # publishes the stick command while the stick is fresh (its own deadman
+      # is 0.25 s), then ZEROS for release_s (2 s) after the last stick event
+      # — and also for release_s after a disarm (click, disconnect, low
+      # battery, idle) that happens while driving — and only then goes
+      # silent. So after the stick goes quiet web teleop / Nav2 stay masked
+      # for ~2.5 s (release_s + this 0.5 s timeout), with the wheels held at
+      # zero, not handed over while moving. 0.5 s matches the bridge's
+      # cmd_timeout. It never writes /cmd_vel itself.
       joystick:
         topic: cmd_vel_joy
         timeout: 0.5

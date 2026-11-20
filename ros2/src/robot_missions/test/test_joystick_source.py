@@ -9,7 +9,9 @@ import types
 import pytest
 
 from robot_missions.joystick_gate import JoyEvent
-from robot_missions.joystick_source import (EvdevSource, bluez_battery, parse_fake_event,
+from robot_missions.joystick_gate import Buttons, JoystickGate, apply_event
+from robot_missions.joystick_source import (BatteryPoller, EvdevSource, bluez_battery,
+                                           evdev_key_name, parse_fake_event,
                                            pick_device, to_event)
 
 
@@ -227,3 +229,222 @@ def test_evdev_source_grab_failure_logged_no_connected_0(fake_evdev):
     assert got == []                                # never connected 1, so never connected 0
     assert any("cannot open" in m for m in logs)
     assert d.closed >= 2                            # closed and retried
+
+
+def test_evdev_source_clears_mac_before_connected_0(fake_evdev):
+    """A stale MAC after a loss would be polled while BlueZ has no Battery1."""
+    add, _ = fake_evdev
+    add(_Dev([_Ev(2, 0, 5), OSError(errno.ENODEV, "gone")]))
+    seen = []                                       # (event, src.mac at emit time)
+    src = EvdevSource("VR-PARK", "", lambda ev: seen.append((ev, src.mac)), retry_s=5.0)
+    _run(src, lambda: any(ev == JoyEvent("connected", "", 0) for ev, _ in seen))
+    assert seen[0] == (JoyEvent("connected", "", 1), "7f:ab:6e:93:c4:30")
+    assert (JoyEvent("connected", "", 0), None) in seen
+    assert src.mac is None
+
+
+def test_evdev_source_start_fails_fast_without_evdev(monkeypatch):
+    """The node imports evdev at start, not inside the reader thread."""
+    monkeypatch.setitem(sys.modules, "evdev", None)     # import evdev -> ImportError
+    src = EvdevSource("VR-PARK", "", lambda ev: None)
+    with pytest.raises(ImportError):
+        src.start()
+    assert src._thread is None
+
+
+# --- key aliases ---------------------------------------------------------------
+
+_ECODES = types.SimpleNamespace(
+    KEY={28: "KEY_ENTER"},
+    BTN={275: "BTN_SIDE", 304: ["BTN_A", "BTN_GAMEPAD", "BTN_SOUTH"]})
+
+
+def test_evdev_key_name_matches_any_alias():
+    assert evdev_key_name(304, _ECODES, ("BTN_SOUTH",)) == "BTN_SOUTH"
+    assert evdev_key_name(304, _ECODES, ("BTN_GAMEPAD", "BTN_SIDE")) == "BTN_GAMEPAD"
+    assert evdev_key_name(304, _ECODES, ()) == "BTN_A"          # unconfigured: first alias
+    assert evdev_key_name(275, _ECODES, ("BTN_SOUTH",)) == "BTN_SIDE"
+    assert evdev_key_name(28, _ECODES, ()) == "KEY_ENTER"
+    assert evdev_key_name(999, _ECODES, ()) == "KEY_999"
+
+
+def test_alias_configured_button_arms_the_gate():
+    """A button configured by any alias name is the same button."""
+    now = [100.0]
+    gate = JoystickGate(clock=lambda: now[0])
+    buttons = Buttons(arm="BTN_SOUTH")
+    apply_event(gate, JoyEvent("connected", "", 1), buttons)
+    ev = to_event(1, 304, 1, lambda c: evdev_key_name(c, _ECODES, (buttons.arm,)))
+    assert ev == JoyEvent("key", "BTN_SOUTH", 1)
+    apply_event(gate, ev, buttons)
+    assert gate.state()["armed"] is True
+
+
+def test_evdev_source_reports_the_configured_alias(fake_evdev):
+    add, _ = fake_evdev
+    import robot_missions.joystick_source  # noqa: F401  (fixture patched evdev)
+    sys.modules["evdev"].ecodes.BTN[304] = ["BTN_A", "BTN_GAMEPAD", "BTN_SOUTH"]
+    add(_Dev([_Ev(1, 304, 1)]))
+    got = []
+    src = EvdevSource("VR-PARK", "", got.append, retry_s=0.01, buttons=("BTN_SOUTH",))
+    _run(src, lambda: JoyEvent("key", "BTN_SOUTH", 1) in got)
+    assert JoyEvent("key", "BTN_SOUTH", 1) in got
+
+
+# --- BatteryPoller -------------------------------------------------------------
+
+class _Reads:
+    """Fake bluez_battery: records MACs, answers from a script (default 80)."""
+
+    def __init__(self, *answers):
+        self.macs, self.answers = [], list(answers)
+
+    def __call__(self, mac):
+        self.macs.append(mac)
+        a = self.answers.pop(0) if self.answers else 80.0
+        if isinstance(a, Exception):
+            raise a
+        return a
+
+
+def _wait(cond, timeout=2.0):
+    import time
+    end = time.monotonic() + timeout
+    while time.monotonic() < end and not cond():
+        time.sleep(0.005)
+    return cond()
+
+
+def _batteries(got):
+    return [ev.value for ev in got if ev.kind == "battery"]
+
+
+def test_poller_polls_right_after_connect():
+    """Remote off/on must not leave the battery unknown for battery_poll_s."""
+    mac = {"v": "7F:AB:6E:93:C4:30"}
+    reads, got = _Reads(20.0), []
+    p = BatteryPoller(lambda: mac["v"], got.append, period_s=60.0, read=reads)
+    p.start()
+    try:
+        p.on_event(JoyEvent("connected", "", 1))
+        assert _wait(lambda: _batteries(got) == [20.0]), got
+        assert reads.macs == ["7F:AB:6E:93:C4:30"]
+    finally:
+        p.stop()
+
+
+def test_poller_ignores_other_events_and_disconnects():
+    reads, got = _Reads(), []
+    p = BatteryPoller(lambda: "AA", got.append, period_s=60.0, read=reads)
+    p.start()
+    try:
+        for ev in (JoyEvent("rel", "x", 3), JoyEvent("connected", "", 0),
+                   JoyEvent("key", "BTN_SIDE", 1)):
+            p.on_event(ev)
+        assert not _wait(lambda: reads.macs, timeout=0.3)
+    finally:
+        p.stop()
+
+
+def test_poller_never_polls_without_a_mac():
+    """Disconnected (the source cleared the MAC): no poll, no NaN, the gate
+    keeps its last known battery."""
+    reads, got = _Reads(), []
+    p = BatteryPoller(lambda: None, got.append, period_s=0.02, read=reads)
+    p.start()
+    try:
+        p.kick()
+        assert not _wait(lambda: reads.macs or got, timeout=0.3)
+    finally:
+        p.stop()
+
+
+def test_poller_periodic():
+    reads, got = _Reads(70.0, 69.0, 68.0), []
+    p = BatteryPoller(lambda: "AA", got.append, period_s=0.02, read=reads)
+    p.start()
+    try:
+        assert _wait(lambda: _batteries(got)[:3] == [70.0, 69.0, 68.0]), got
+    finally:
+        p.stop()
+
+
+def test_poller_periodic_failure_is_unknown():
+    reads, got = _Reads(None), []
+    p = BatteryPoller(lambda: "AA", got.append, period_s=0.02, read=reads)
+    p.start()
+    try:
+        assert _wait(lambda: _batteries(got)), got
+        assert math.isnan(_batteries(got)[0])
+    finally:
+        p.stop()
+
+
+def test_poller_retries_a_failed_read_after_connect_before_unknown():
+    """Battery1 can lag the input device: a failed first read must not turn a
+    known-low battery into "unknown, allowed" — retry first."""
+    reads, got = _Reads(None, None, 18.0), []
+    p = BatteryPoller(lambda: "AA", got.append, period_s=60.0, read=reads,
+                      retry_s=0.01, retries=3)
+    p.start()
+    try:
+        p.on_event(JoyEvent("connected", "", 1))
+        assert _wait(lambda: _batteries(got)), got
+        assert _batteries(got) == [18.0] and len(reads.macs) == 3
+    finally:
+        p.stop()
+
+
+def test_poller_gives_up_after_retries_as_unknown():
+    reads, got = _Reads(None, None, None, None, 50.0), []
+    p = BatteryPoller(lambda: "AA", got.append, period_s=60.0, read=reads,
+                      retry_s=0.01, retries=2)
+    p.start()
+    try:
+        p.on_event(JoyEvent("connected", "", 1))
+        assert _wait(lambda: _batteries(got)), got
+        b = _batteries(got)
+        assert len(b) == 1 and math.isnan(b[0]) and len(reads.macs) == 3
+    finally:
+        p.stop()
+
+
+def test_poller_drops_a_read_whose_mac_went_away():
+    """Disconnect during busctl: the stale result (usually a failure = NaN)
+    must not reach the gate."""
+    mac = {"v": "AA"}
+
+    def read(m):
+        mac["v"] = None                         # the link drops mid-read
+        return None
+
+    got = []
+    p = BatteryPoller(lambda: mac["v"], got.append, period_s=60.0, read=read,
+                      retry_s=0.01, retries=0)
+    p.start()
+    try:
+        p.kick()
+        assert not _wait(lambda: got, timeout=0.3)
+    finally:
+        p.stop()
+
+
+def test_poller_survives_exceptions():
+    logs, got = [], []
+    reads = _Reads(RuntimeError("boom"), 55.0)
+
+    def bad_emit(ev):
+        got.append(ev)
+
+    p = BatteryPoller(lambda: "AA", bad_emit, period_s=60.0, read=reads,
+                      retry_s=0.01, retries=0, log=logs.append)
+    p.start()
+    try:
+        p.kick()
+        assert _wait(lambda: logs), logs
+        p.kick()
+        assert _wait(lambda: _batteries(got) == [55.0]), got
+        assert p._thread.is_alive()
+    finally:
+        p.stop()
+    assert not p._thread.is_alive()
