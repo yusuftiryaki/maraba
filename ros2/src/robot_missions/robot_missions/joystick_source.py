@@ -6,7 +6,10 @@ node's fake mode work on machines without python3-evdev.
 
 from __future__ import annotations
 
+import json
+import math
 import re
+import select
 import subprocess
 import threading
 import time
@@ -33,6 +36,23 @@ def to_event(ev_type: int, code: int, value: int,
     if ev_type == EV_ABS:
         return JoyEvent("other", "", 0)
     return None
+
+
+_KINDS = ("rel", "key", "other", "connected", "battery")
+
+
+def parse_fake_event(text: str) -> JoyEvent:
+    """Parse a fake_events message; raises ValueError/TypeError/KeyError if bad."""
+    d = json.loads(text)
+    kind, code, value = d["kind"], d["code"], d["value"]
+    if kind not in _KINDS or not isinstance(code, str):
+        raise ValueError("bad kind/code")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError("value must be a number")
+    value = float(value)
+    if math.isinf(value) or (math.isnan(value) and kind != "battery"):
+        raise ValueError("value must be finite")
+    return JoyEvent(kind, code, value)
 
 
 def pick_device(candidates: Sequence[Tuple[str, str, str, bool]],
@@ -88,9 +108,17 @@ class EvdevSource:
     def _run(self) -> None:
         import evdev                                # lazy: only on the Pi
         from evdev import ecodes
-        last_log = -_LOG_EVERY_S
+        last_log = {}                               # message key -> last log time
+
+        def log_limited(key: str, msg: str) -> None:
+            now = time.monotonic()
+            if now - last_log.get(key, -_LOG_EVERY_S) >= _LOG_EVERY_S:
+                last_log[key] = now
+                self._log(msg)
+
         while not self._stop.is_set():
             dev = None
+            up = False                              # connected 1 was emitted
             try:
                 devs = [evdev.InputDevice(p) for p in evdev.list_devices()]
                 cands = [(d.path, d.name, d.uniq or "",
@@ -102,23 +130,25 @@ class EvdevSource:
                     else:
                         d.close()
                 if dev is None:
-                    now = time.monotonic()
-                    if now - last_log >= _LOG_EVERY_S:
-                        last_log = now
-                        self._log(f"remote '{self._name}' not found, retrying")
-                    self._stop.wait(self._retry_s)
-                    continue
-                dev.grab()
-                self.mac = dev.uniq or None
-                self._emit(JoyEvent("connected", "", 1))
-                self._read(dev, ecodes)
-            except OSError:
-                pass
+                    log_limited("missing", f"remote '{self._name}' not found, retrying")
+                else:
+                    dev.grab()
+                    self.mac = dev.uniq or None
+                    self._emit(JoyEvent("connected", "", 1))
+                    up = True
+                    self._read(dev, ecodes)
+            except OSError as e:
+                where = getattr(dev, "path", "?")
+                if up:
+                    self._log(f"remote lost on {where}: {e!r}")
+                else:
+                    log_limited("oserror", f"cannot open remote on {where}: {e!r}")
             except Exception as e:                  # keep the reader alive
-                self._log(f"evdev reader error: {e!r}")
+                log_limited("error", f"evdev reader error: {e!r}")
             finally:
-                if dev is not None:
+                if up:
                     self._emit(JoyEvent("connected", "", 0))
+                if dev is not None:
                     try:
                         dev.close()
                     except Exception:
@@ -133,7 +163,6 @@ class EvdevSource:
         while not self._stop.is_set():
             ready = dev.read_one()                  # non-blocking
             if ready is None:
-                import select
                 select.select([dev.fd], [], [], 0.2)
                 continue
             try:

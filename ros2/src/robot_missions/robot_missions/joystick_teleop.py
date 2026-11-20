@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 import time
 
 import rclpy
@@ -24,24 +25,8 @@ from std_msgs.msg import String
 
 from robot_missions.joystick_gate import (Buttons, JoyEvent, JoystickGate,
                                           apply_event)
-from robot_missions.joystick_source import EvdevSource, bluez_battery
-
-_KINDS = ("rel", "key", "other", "connected", "battery")
-
-
-def parse_fake_event(text: str) -> JoyEvent:
-    """Parse a fake_events message; raises ValueError/TypeError/KeyError if bad."""
-    d = json.loads(text)
-    kind, code, value = d["kind"], d["code"], d["value"]
-    if kind not in _KINDS or not isinstance(code, str):
-        raise ValueError("bad kind/code")
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError("value must be a number")
-    value = float(value)
-    if math.isinf(value) or (math.isnan(value) and kind != "battery"):
-        raise ValueError("value must be finite")
-    return JoyEvent(kind, code, value)
-
+from robot_missions.joystick_source import (EvdevSource, bluez_battery,
+                                           parse_fake_event)
 
 class JoystickTeleop(Node):
     def __init__(self, **kwargs):
@@ -80,6 +65,8 @@ class JoystickTeleop(Node):
         self.create_timer(0.1, self._tick_state)
 
         self._source = None
+        self._poller = None
+        self._closing = threading.Event()
         if self._fake:
             self.create_subscription(String, "joystick/fake_events",
                                      self._on_fake, 10)
@@ -87,7 +74,12 @@ class JoystickTeleop(Node):
             self._source = EvdevSource(g("device_name"), g("device_mac"),
                                        self._emit, log=self.get_logger().warning)
             self._source.start()
-            self.create_timer(float(g("battery_poll_s")), self._poll_battery)
+            # Off the executor: busctl can take up to 2 s, which would stall
+            # the 20 Hz cmd_vel_joy tick and let twist_mux drop the joystick.
+            self._poll_s = float(g("battery_poll_s"))
+            self._poller = threading.Thread(target=self._poll_loop,
+                                            name="joy-battery", daemon=True)
+            self._poller.start()
 
     def _emit(self, event: JoyEvent) -> None:
         try:
@@ -102,6 +94,10 @@ class JoystickTeleop(Node):
             self.get_logger().warning(f"bad fake event dropped: {e!r}")
             return
         self._emit(event)
+
+    def _poll_loop(self) -> None:
+        while not self._closing.wait(self._poll_s):
+            self._poll_battery()
 
     def _poll_battery(self) -> None:
         mac = self._source.mac if self._source else None
@@ -122,6 +118,9 @@ class JoystickTeleop(Node):
         self._state_pub.publish(String(data=json.dumps(self._gate.state())))
 
     def close(self) -> None:
+        self._closing.set()
+        if self._poller is not None:
+            self._poller.join(timeout=3.0)
         if self._source is not None:
             self._source.stop()
 
