@@ -11,13 +11,27 @@
 - Kitin iki sürümü var, soket ikisini de baştan karşılar:
   - **v1 (LiDAR'sız):** ZED-F9P + anten, 360° kamera, ESP32 GNSS kaydedici.
   - **v2 (LiDAR'lı):** v1'e ek olarak Livox Mid-360 sınıfı LiDAR ve Pi 5 (ROS 2).
-- **Kit, robot olmadan da çalışır** (sırtta ya da motosiklette). Soket kite eklenen
+- **Kit, robot olmadan da çalışır** (elle çekilen arabada ya da ATV'de). Soket kite eklenen
   bir fiştir; kitin kendi kayıt yolu (ESP32 → microSD, kamera → kendi kartı,
   BLE → telefon) robot takılı olsa da aynen çalışır.
 - **Repolar ayrı.** Soketin sahibi robottur: pin dizilimi, kimlik formatı ve
   topic sözleşmesi bu belgede tanımlıdır. orchadOS kiti bu sözleşmeye uyar.
   Seri protokoldeki kural burada da geçerli: kimlik formatının test vektörleri
   iki repoda aynı tutulur (bkz. "Repolar arası sözleşme").
+
+> **orchadOS tarafında değişenler (2026-11-20).** Bu belgenin bazı kabulleri
+> kit tarafında değişti; soketin sözleşmesi (pinler, çip, şema 1) değişmedi.
+> - **Kit:** kayıt kitin kendi **Raspberry Pi 4**'ünde (ROS 2 Jazzy); ESP32
+>   kaydedici kitten çıktı (2026-11-16), Pi telefona ESP32 gibi görünür.
+>   LiDAR **Unitree L2** (Livox Mid-360 değil). Kamera Insta360 X4 Air.
+> - **Taşıyıcılar:** robot, yürüyerek taramada **elle çekilen araba** ve
+>   motosikletin yerine **ATV**. Sırtta taşıma ve motosiklet yok. Üçünde de
+>   direğin dibi aynı anahtarlı yuvaya oturur.
+> - **Yükseklikler (yerden):** GNSS anteni **~1,7 m**, 360° kamera **~1,6 m**,
+>   LiDAR **~0,6 m** (önce 2,1 / 2,0 / 1,2 m). Ayrıntı aşağıda, "Soket — mekanik".
+> - **Açık:** v1/v2 ayrımı ve `gnss_link` (ESP32'siz kitte F9P'yi Pi okuyor)
+>   K3'te orchadOS ile birlikte yeniden bakılacak. Kaynak: orchadOS
+>   `docs/tarama-kiti.md` ve `docs/kit-siparis-listesi.md`.
 
 ## Kullanıcı kararları (2026-10-25)
 
@@ -134,27 +148,38 @@ sürtünmesi μ 0,5, yerçekimi eğilerek eğim):
 - **Plaka arkaya kayarsa pay üçte birine iner.** Kaymaması gereken tek ölçü bu.
 - **Kitin aküsü direğin dibine konmalı.** Akü yukarıda olursa ağırlık merkezi
   yükselir ve tablo değişir.
-- **Kalan risk:** direğin tepesinin bir dala takılması. Bu, 2 m'lik bir kaldıraç
-  demek. Tampon yere yakın olduğu için bunu algılamaz.
+- **Kalan risk:** direğin tepesinin bir dala takılması. Bu, plakadan ~1,5 m'lik
+  bir kaldıraç demek (direk 2026-11-20'de 2,1 m'den 1,7 m'ye kısaldı). Tampon
+  yere yakın olduğu için bunu algılamaz.
 
-**Yükseklikler yerden ölçülür ve sırttaki kitle aynı tutulur.** Böylece
-robotla ve sırtla toplanan veri karşılaştırılabilir kalır. GNSS anteni ~2,1 m,
-360° kamera ~2,0 m, v2'de LiDAR ~1,2 m. Plaka 0,18 m'de olduğu için robot
-üzerinde kamera plakanın 1,82 m üstüne gelir. Kitin direği bu yüksekliğe
-ayarlanabilir olmalı (orchadOS tarafının işi).
+**Yükseklikler yerden ölçülür ve üç taşıyıcıda aynı tutulur** (robot, elle
+çekilen araba, ATV). Böylece hepsiyle toplanan veri karşılaştırılabilir kalır.
+GNSS anteni ~1,7 m (direğin tepesinde), 360° kamera ~1,6 m, LiDAR ~0,6 m
+(orchadOS, 2026-11-20; önce 2,1 / 2,0 / 1,2 m). Plaka 0,18 m'de olduğu için
+robot üzerinde anten plakanın ~1,52 m, kamera ~1,42 m, LiDAR ~0,42 m üstüne
+gelir (`fake_kit`'teki pozlar bunlar). LiDAR'ın 0,6 m'ye inmesi gövdeyi dibe
+yakın görmesi içindir; direğin kısalması sallanmayı yaklaşık yarıya indirir ve
+dala takılma riskini azaltır. Kitin direği ve LiDAR kelepçesi ayarlanabilir
+(orchadOS tarafının işi).
 
 **Diğer sensörlerle çakışma:**
 - **Pi Camera V2 ve kenar kamerası** öne bakıyor (x = +0,30, plakanın önünde).
   Direk ikisinin de görüşüne girmez; docking etiketi de etkilenmez.
 - **Manyetometre** robotun kendi direğinde (x = −0,15, ~0,63 m yükseklikte).
   Kit direğine yatayda 0,26 m uzakta. Alüminyum direk sorun değil. Kitin aküsü
-  ~0,45 m uzakta kalıyor.
+  ~0,45 m uzakta kalıyor. ⚠️ **LiDAR artık manyetometreye yakın:** 0,6 m'deki
+  L2, manyetometreyle neredeyse aynı yükseklikte ve ~0,26 m uzakta; dönen
+  motoru yön okumasını bozabilir. Aşağıdaki kontrol bunu da yakalar; bozuyorsa
+  LiDAR kolu öne alınır.
   **Kontrol:** Kit ilk takıldığında robot yerinde bir tur döner ve
   manyetometrenin verdiği yön, kitsizkiyle karşılaştırılır
   (`mag-calibration.md`). Fark birkaç dereceden büyükse ancak o zaman ikinci bir
   kalibrasyon profili yapılır.
 - **360° kamera görüntüsünde robot** aşağıda küçük bir bölge olarak kalır;
   maskelenir.
+- **LiDAR'ın görüşünde robot:** L2 tabanının üstündeki yarım küreyi ve 6°
+  altını görür. Şasi (0,18 m) görüşe girmez; robotun kendi direği (~0,63 m'ye
+  kadar) arkada dar bir sektörü kapatır, orchadOS yazılımla maskeler.
 - **Nav2 ayak izi** değişmez (`robot_radius` 0,4 m). Direk bu çemberin içinde.
 
 **Mekanik bağlantı:** Plaka alüminyum, üzerinde kit direğinin çapına uygun hızlı
@@ -323,8 +348,8 @@ dikilir, envanterde hata olur. Bu yüzden:
 engeller** (karar 12): robot onları göremez ve içlerine sürer. Robotla ilk
 envanter, gövdeleri canlı olarak görmeyi gerektirir.
 
-1. **İlk bahçeler: orchadOS'taki plan aynen.** Envanter sırtta ya da motosikletle
-   taranır, ofiste tıklanarak üçgenlenir. Tıklamalar gövde modelinin eğitim
+1. **İlk bahçeler: orchadOS'taki plan aynen.** Envanter yürüyerek (kit elle
+   çekilen arabada) ya da ATV ile taranır, ofiste tıklanarak üçgenlenir. Tıklamalar gövde modelinin eğitim
    verisi olur.
 2. **Robot periyodik ziyaretlere girer.** Onaylı harita var. Robot onu başlangıç
    tahmini olarak kullanır ve değişimleri bildirir. v1 kitle de olur.
