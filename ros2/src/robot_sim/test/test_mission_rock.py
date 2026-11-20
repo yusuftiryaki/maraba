@@ -25,6 +25,7 @@ pytest.importorskip("rclpy", reason="ROS 2 not sourced")
 
 from std_msgs.msg import Bool                           # noqa: E402
 
+from robot_missions.mission import RobotSpec            # noqa: E402
 from robot_sim.sim_node import EARTH_RADIUS_M           # noqa: E402
 
 from test_mission_coverage import (                     # noqa: E402
@@ -39,6 +40,9 @@ SIM_ARGS = (*QUIET_GPS,
             "-p", f"unsurveyed_obstacle_radii:=[{ROCK_R}]",
             "-p", "bumper_from_obstacles:=true")
 TIMEOUT_S = 1200.0
+# mission_runner's default `detection_margin`: rows are cut round a detection
+# at radius_m + robot_radius + obstacle_margin + this (mission_runner._cut_pieces).
+DETECTION_MARGIN = 0.3
 
 
 class RockWatcher(Watcher):
@@ -98,12 +102,19 @@ def test_the_bumper_finds_an_unsurveyed_rock_and_the_mission_mows_round_it(
             detected = json.load(handle)["detected"]
         where = [to_sim_world(d["lat"], d["lon"]) for d in detected]
         coverage, overrun = measure(watcher.track)
+        # The lawn the mission MEANT to mow: everything but the clearance it
+        # keeps round each detection — that much is blanked on purpose.
+        robot = RobotSpec()
+        keep_out = [(x, y, d["radius_m"] + robot.robot_radius + robot.obstacle_margin
+                     + DETECTION_MARGIN) for (x, y), d in zip(where, detected)]
+        meant, _ = measure(watcher.track, exclude=keep_out)
         if os.environ.get("COVERAGE_TRACK_DUMP"):
             with open(os.environ["COVERAGE_TRACK_DUMP"], "w", encoding="utf-8") as handle:
                 json.dump({"track": watcher.track, "where": where}, handle)
         print(f"rock: {watcher.collisions} collision(s), detections at "
               f"{[(round(x, 2), round(y, 2)) for x, y in where]}, skipped "
-              f"{watcher.status['skipped']}, coverage {coverage:.1%}, overrun {overrun:.2f} m")
+              f"{watcher.status['skipped']}, coverage {coverage:.1%} "
+              f"(outside the detections' clearance {meant:.1%}), overrun {overrun:.2f} m")
 
         # Found, and found where it is. A contact point lies on the rock's
         # surface (0.2 m from its centre) — as well as the robot knew where IT
@@ -115,13 +126,21 @@ def test_the_bumper_finds_an_unsurveyed_rock_and_the_mission_mows_round_it(
         # Learned once: after the first press, the rows that would have hit it
         # again are cut round it. Two is allowed (a press while backing off).
         assert watcher.collisions <= 2, f"hit the rock {watcher.collisions} times"
-        # The rest of the lawn still gets mown. MEASURED 75.1 / 77.7 / 80.0% (the rock-free
-        # lawn: 95-96%). The price is the clearance kept round each
-        # detection — 0.25 m circle + robot 0.4 + 0.1 + detection_margin 0.3,
-        # about a metre from its centre, so a little rock blanks a lot of
-        # lawn. Tighter, and the rows' cut ends sat in the costmap's inscribed
-        # zone: three rows skipped (70.7%). A person labelling the rock with
-        # its real size (phase 4) gives the lawn back.
-        assert coverage >= 0.70, f"only {coverage:.1%} cut"
+        # A press lands where the bumper met the rock; two presses on
+        # different sides are two detections (CI, 2026-11-12: 0.86 m apart).
+        assert len(detected) <= 2, f"{len(detected)} detections of one rock"
+        # The rest of the lawn still gets mown. The price is the clearance
+        # kept round each detection — 0.25 m circle + robot 0.4 + 0.1 +
+        # detection_margin 0.3, about a metre from its centre: one detection
+        # blanks ~29% of this 4 x 3 m lawn, two up to ~45%. So the whole-lawn
+        # number is mostly WHERE the presses landed — MEASURED 75.1 / 77.7 /
+        # 80.0%, and 60.9% with two detections 0.86 m apart — and asserting
+        # on it failed a run that did what it meant to. What the mission
+        # controls is the lawn OUTSIDE that clearance (rock-free lawn, quiet
+        # GPS: 94-96%). Cut ends sitting in the costmap's inscribed zone (rows
+        # skipped, seen once) show up here. A person labelling the rock with
+        # its real size (phase 4) gives the blanked lawn back.
+        assert meant >= 0.85, (f"only {meant:.1%} of the lawn outside the "
+                               "detections' clearance cut")
     finally:
         watcher.destroy_node()

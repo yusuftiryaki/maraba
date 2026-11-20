@@ -40,6 +40,44 @@ def long_lawn():
             "properties": {"kind": "area", "name": "uzun"}}
 
 
+def row_errors(track, rows):
+    """Each cutting point's distance from ITS OWN row line.
+
+    ⚠️ Not from the NEAREST row line: on this lawn the two rows are 0.5 m apart,
+    so that distance tops out at 0.25 m between them — a row that drifted
+    onto its neighbour read as on its line. CI, 2026-11-12: whole rows "p95
+    0.233 m, max 0.250 m" (the drift measured locally on the same code:
+    1.18 m) and "chunking did not help" failed a run where it had.
+
+    Rows run along x in boustrophedon order, so each row is driven the other
+    way from the one before: the cutting stretches are grouped by direction
+    (a row driven in chunks, or a blip of the trimmer, stays one group) and
+    the k-th group is the k-th row from the edge row the first one started on."""
+    stretches, current = [], []
+    for x, y, cutting in track:
+        if cutting:
+            current.append((x, y))
+        elif current:
+            stretches.append(current)
+            current = []
+    if current:
+        stretches.append(current)
+    groups = []                                     # [direction, points]
+    for stretch in stretches:
+        if abs(stretch[-1][0] - stretch[0][0]) < 0.3:
+            continue                                # a blip, not a row
+        direction = 1 if stretch[-1][0] > stretch[0][0] else -1
+        if groups and groups[-1][0] == direction:
+            groups[-1][1].extend(stretch)
+        else:
+            groups.append([direction, list(stretch)])
+    assert len(groups) == len(rows), (
+        f"{len(groups)} cutting runs for {len(rows)} rows — cannot tell which row is which")
+    first = min(rows, key=lambda r: abs(r - groups[0][1][0][1]))
+    order = sorted(rows, reverse=first != min(rows))
+    return [abs(y - row) for (_, points), row in zip(groups, order) for _, y in points]
+
+
 def drive(site_nav2_stack, tmp_path, max_leg):
     stack = site_nav2_stack([long_lawn()], *QUIET_GPS)
     runner = subprocess.Popen(
@@ -62,7 +100,7 @@ def drive(site_nav2_stack, tmp_path, max_leg):
             with open(f"{os.environ['LONG_ROWS_DUMP']}_{max_leg}.json", "w") as handle:
                 json.dump(watcher.track, handle)
         rows = row_offsets(LAWN[0][1] + CUT_WIDTH / 2, LAWN[2][1] - CUT_WIDTH / 2, CUT_WIDTH)
-        off = sorted(min(abs(y - r) for r in rows) for x, y, c in watcher.track if c)
+        off = sorted(row_errors(watcher.track, rows))
         return off[int(0.95 * (len(off) - 1))], off[-1]
     finally:
         watcher.destroy_node()
@@ -72,10 +110,12 @@ def drive(site_nav2_stack, tmp_path, max_leg):
 def test_long_rows_hold_their_line_in_chunks(site_nav2_stack, tmp_path):
     whole = drive(site_nav2_stack, tmp_path, 0.0)
     chunked = drive(site_nav2_stack, tmp_path, 4.0)
-    print(f"off the row lines on an 18 m lawn: whole rows p95 {whole[0]:.3f} m "
+    print(f"off their own row lines on an 18 m lawn: whole rows p95 {whole[0]:.3f} m "
           f"(max {whole[1]:.3f}), 4 m chunks p95 {chunked[0]:.3f} m (max {chunked[1]:.3f})")
     # measured (2026-10-26, two runs): whole rows p95 0.86-1.26 m (the arc, and
-    # the next row laid out from its drifted end), 4 m chunks 0.39-0.49 m.
+    # the next row laid out from its drifted end), 4 m chunks 0.39-0.49 m —
+    # those against the NEAREST row line; row_errors() measures against the
+    # row's own line, which no longer hides a drift onto the neighbour.
     # What is left is the compass's own error (±1°, test_map_heading) and a
     # few cm per chunk.
     assert chunked[0] < 0.7 * whole[0], "chunking did not help"
