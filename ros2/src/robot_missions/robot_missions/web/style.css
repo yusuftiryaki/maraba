@@ -19,6 +19,11 @@ header { display: flex; justify-content: space-between; gap: 8px; margin-bottom:
 #kit.kit-none { color: var(--muted); }
 #kit.kit-ready { background: #1b5e20; color: #fff; }
 #kit.kit-degraded { background: #e65100; color: #fff; }
+#joystick { font-size: 0.85em; padding: 1px 6px; border-radius: 4px; cursor: help; }
+#joystick.joy-off { color: var(--muted); }
+#joystick.joy-idle { background: #455a64; color: #fff; }
+#joystick.joy-armed { background: #1b5e20; color: #fff; }
+#joystick.joy-low { background: #e65100; color: #fff; }
 nav { display: flex; gap: 4px; margin-bottom: 12px; }
 nav button { flex: 1; }
 nav button.active { background: var(--accent); color: white; border-color: var(--accent); }

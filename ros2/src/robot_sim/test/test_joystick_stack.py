@@ -12,6 +12,7 @@ import json
 import math
 import threading
 import time
+import urllib.request
 
 import pytest
 
@@ -23,9 +24,17 @@ from nav_msgs.msg import Odometry                       # noqa: E402
 from rclpy.executors import SingleThreadedExecutor      # noqa: E402
 from std_msgs.msg import String                         # noqa: E402
 
+from conftest import WebStack                           # noqa: E402
+
 QUIET_GPS = ("-p", "gps_wander_sigma:=0.0", "-p", "gps_noise_sigma:=0.02")
 EVENT_PERIOD_S = 0.03
 DEADMAN_S = 0.25
+BASE = f"http://127.0.0.1:{WebStack.WEB_PORT}"
+
+
+def api_status():
+    with urllib.request.urlopen(BASE + "/api/status", timeout=10) as response:
+        return json.loads(response.read())
 RELEASE_S = 2.0
 
 
@@ -131,7 +140,11 @@ def test_joystick_drives_and_silence_stops_it(watch):
     watch.arm()
     assert watch.state()["armed"] is True, watch.state()
     start = time.monotonic()
-    last = watch.stick(-17, 3.0)        # forward, level 1 (0.2 m/s)
+    watch.stick(-17, 1.0)
+    badge = api_status()["joystick"]     # the header badge reads this
+    assert badge is not None and badge["armed"] is True, badge
+    assert badge["speed_level"] == 1, badge
+    last = watch.stick(-17, 2.0)        # forward, level 1 (0.2 m/s)
     time.sleep(RELEASE_S + 1.5)
 
     driving = [c for c in watch.cmd if start < c[0] < last]

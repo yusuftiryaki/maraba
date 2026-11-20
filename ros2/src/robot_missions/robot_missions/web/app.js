@@ -420,6 +420,7 @@ async function pollStatus() {
       ? `🔋 %${Math.round(s.battery.percentage * 100)}` : "";
     $("mission-status").textContent = m ? JSON.stringify(m, null, 1) : "";
     showKit(s.kit);
+    showJoystick(s.joystick);
     if (typeof onTeachStatus === "function") onTeachStatus(s.teach);
     if (typeof onEpisodeStatus === "function") onEpisodeStatus(s.episode);
   } catch (e) {
@@ -455,6 +456,29 @@ function showKit(k) {
   tips.push("GPS: " + (k.gps_source === "kit" ? "kitin F9P'si" : "robotun NEO-6M'i") +
             (k.gps_wanted !== k.gps_source ? " (robot durunca değişecek)" : ""));
   if (k.ntrip) tips.push("NTRIP: " + k.ntrip.state + (k.ntrip.error ? " — " + k.ntrip.error : ""));
+  box.textContent = text;
+  box.title = tips.join("\n");
+}
+
+// --- the Bluetooth remote (joy/state) -----------------------------------------
+// One badge in the header; hidden while the remote node is not running.
+const JOY_LOW_BATTERY_PCT = 25;
+function showJoystick(j) {
+  const box = $("joystick");
+  if (!j) { box.hidden = true; return; }
+  box.hidden = false;
+  let cls, text;
+  if (!j.connected) { cls = "joy-off"; text = "🎮 bağlı değil"; }
+  else if (!j.armed) { cls = "joy-idle"; text = "🎮 kapalı"; }
+  else { cls = "joy-armed"; text = `🎮 etkin · kademe ${j.speed_level}`; }
+  if (j.battery !== null && j.battery !== undefined) {
+    text += ` · pil %${Math.round(j.battery)}`;
+    if (j.battery < JOY_LOW_BATTERY_PCT) cls += " joy-low";
+  }
+  const tips = [];
+  if (j.refusal) tips.push(j.refusal);
+  if (j.mode_hint === "@+D?") tips.push("kumanda fare modunda değil (@ + D)");
+  box.className = cls;
   box.textContent = text;
   box.title = tips.join("\n");
 }

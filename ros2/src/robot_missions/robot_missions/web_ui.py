@@ -54,6 +54,10 @@ from robot_missions.web_api import WebApi, default_static_dir, make_server
 from robot_missions_interfaces.srv import Episode, StartMission
 
 
+# joy/state arrives at 10 Hz; older than this and the remote node is gone.
+JOYSTICK_STALE_S = 2.0
+
+
 class WebUi(Node):
     def __init__(self, **kwargs):
         super().__init__("web_ui", **kwargs)
@@ -95,6 +99,11 @@ class WebUi(Node):
         self._ntrip = None
         self.create_subscription(String, "kit/state", self._on_kit, latched)
         self.create_subscription(String, "kit/ntrip/status", self._on_ntrip, latched)
+        # The Bluetooth remote (joystick_teleop): the header's remote badge.
+        # joy/state is not latched, so a stale message means the node is gone.
+        self._joystick = None
+        self._joystick_at = 0.0
+        self.create_subscription(String, "joy/state", self._on_joystick, 10)
         self._episode_client = self.create_client(Episode, "episode_recorder/command")
         self._tf = Buffer()
         self._tf_listener = TransformListener(self._tf, self)
@@ -173,6 +182,12 @@ class WebUi(Node):
         with self._lock:
             self._kit = json.loads(msg.data)
 
+    def _on_joystick(self, msg: String) -> None:
+        state = json.loads(msg.data)
+        with self._lock:
+            self._joystick = state
+            self._joystick_at = time.monotonic()
+
     def _on_ntrip(self, msg: String) -> None:
         with self._lock:
             self._ntrip = json.loads(msg.data)
@@ -190,12 +205,15 @@ class WebUi(Node):
             fix, mission = self._fix, self._mission
             supervisor, battery, episode = self._supervisor, self._battery, self._episode
             kit = dict(self._kit, ntrip=self._ntrip) if self._kit is not None else None
+            fresh = time.monotonic() - self._joystick_at < JOYSTICK_STALE_S
+            joystick = self._joystick if fresh else None
         robot = None
         if fix is not None:
             robot = {"lat": fix[0], "lon": fix[1], "age_s": round(time.time() - fix[2], 1),
                      "heading_deg": self._heading()}
         return {"robot": robot, "mission": mission, "supervisor": supervisor,
-                "battery": battery, "episode": episode, "kit": kit}
+                "battery": battery, "episode": episode, "kit": kit,
+                "joystick": joystick}
 
     def _pose2(self, parent: str, child: str) -> Optional[Pose2]:
         try:
