@@ -112,6 +112,21 @@ def watch(joystick_stack):
         w.close()
 
 
+def timeline(watch, t0, span=1.0):
+    """t0-relative dump of everything the stop depends on, for failure messages."""
+    def rel(rows, fmt):
+        return [f"{row[0] - t0:+.3f} {fmt(row)}" for row in rows
+                if -span <= row[0] - t0 <= span]
+    cmd = rel(watch.cmd, lambda r: f"cmd_vel={r[1]}")
+    joy = rel(watch.joy, lambda r: f"joy={r[1]}")
+    st = [f"{t - t0:+.3f} armed={s['armed']} connected={s['connected']} "
+          f"refusal={s['refusal']} lin={s['linear']}"
+          for t, s in watch.states if -span <= t - t0 <= span]
+    return ("\n/cmd_vel:\n  " + "\n  ".join(cmd[-25:]) +
+            "\n/cmd_vel_joy:\n  " + "\n  ".join(joy[-25:]) +
+            "\njoy/state:\n  " + "\n  ".join(st))
+
+
 def test_joystick_drives_and_silence_stops_it(watch):
     watch.arm()
     assert watch.state()["armed"] is True, watch.state()
@@ -144,12 +159,14 @@ def test_joystick_drives_and_silence_stops_it(watch):
 
 def test_disconnect_mid_drive_stops_and_reconnect_needs_rearm(watch):
     watch.arm()
+    t_arm = time.monotonic()
     watch.stick(-17, 1.5)
     t_drop = watch.send("connected", value=0)
     time.sleep(0.5)
     zero = next((c for c in watch.cmd if c[0] > t_drop and c[1] == 0.0), None)
-    assert zero is not None and zero[0] - t_drop < 0.15, \
-        f"no zero within 0.15 s of the link dropping ({zero})"
+    assert zero is not None and zero[0] - t_drop < 0.15, (
+        f"no zero within 0.15 s of the link dropping ({zero}); armed at "
+        f"{t_arm - t_drop:+.3f}{timeline(watch, t_drop)}")
     assert watch.state()["armed"] is False, watch.state()
 
     # The gate holds zeros for release_s after a disarm (the wheels stay
