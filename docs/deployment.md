@@ -230,6 +230,36 @@ uyarır). İçindekiler ve gerekçeleri dosyanın yorumlarında: `site_file`,
 8. **Kontrol:** `ros2 topic echo /kit/state --once` → kit takılıyken
    `"state": "READY"`, `"gps_source": "kit"` (robot dururken geçer).
 
+## Adım 10 — Bluetooth kumanda (`use_joystick:=true`; `docs/missions.md` 5a-ek)
+Elle sürüş için BLE kumanda (VR-PARK). Varsayılan **kapalı**; açmadan robot
+eskisi gibi davranır.
+1. **Paketler ve izin:**
+   ```
+   sudo apt install bluez python3-evdev
+   sudo usermod -aG input enes     # robot.service kullanıcısı (deploy/robot.service); oturumu kapat-aç / yeniden başlat
+   ```
+2. **Eşleştirme (bir kez)** — kumandayı uyandır, sonra:
+   ```
+   bluetoothctl
+   power on
+   agent on
+   scan on            # VR-PARK'ın MAC'ini bul
+   pair  <MAC>
+   trust <MAC>        # sonraki açılışlarda kendiliğinden bağlanır
+   connect <MAC>
+   ```
+3. **Kumandayı `@ + D` (fare modu) yap — her açılışta.** Mod hafızası
+   ölçülmedi (missions.md kontrol listesi, madde 2). Yanlış modda robot
+   kıpırdamaz; durumda `mode_hint: "@+D?"` görünür.
+4. **robot.service:** `ExecStart` satırındaki `ros2 launch ...` komutuna
+   `use_joystick:=true` ekle, sonra `sudo systemctl daemon-reload && sudo systemctl restart robot`.
+5. **Kontrol:** `ros2 topic echo /joy/state --once` → `"connected": true`;
+   web başlığında 🎮 rozeti. Sürmek için arka tetiğe (`BTN_SIDE`) tıkla
+   (etkinleştir), çubuğu it.
+⚠️ Bağlantı kopunca robot ≤ ~0,3 s içinde durur ama bu Linux'un kopuşu fark
+etmesine **dayanmaz** (BLE supervision timeout 6 s); canlılık kumandanın kendi
+`REL` akışından gelir. Sahada tekerlekler havadayken denemeden yere indirme.
+
 ## Sıra / bağımlılıklar
 1–2 (OS + ROS) donanımdan bağımsız, **hemen yapılabilir**. 3 ROS workspace'i
 gerektiriyor (sonraki adım). 4–5 (udev, I2C) donanım Pi'a bağlanınca. 7 (DDS)
