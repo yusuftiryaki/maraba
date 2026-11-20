@@ -33,11 +33,11 @@ FAKE_DIR = "/tmp/fake_kit"
 GNSS_LINK = "/tmp/fake_kit_gnss"
 
 # The kit's sensors in kit_mount (docs/kit-soketi.md, "montaj plakası"): the
-# plate is 0.1825 m off the ground, the antenna ~2.1 m, the camera ~2.0 m and
-# a v2 LiDAR ~1.2 m above the ground.
-GNSS_POSE = m.Pose(0.0, 0.0, 1.92)
-CAM_POSE = m.Pose(0.0, 0.0, 1.82)
-LIDAR_POSE = m.Pose(0.0, 0.0, 1.02)
+# plate is 0.1825 m off the ground, the antenna ~1.7 m, the camera ~1.6 m and
+# the LiDAR ~0.6 m above the ground (orchadOS, 2026-11-20).
+GNSS_POSE = m.Pose(0.0, 0.0, 1.52)
+CAM_POSE = m.Pose(0.0, 0.0, 1.42)
+LIDAR_POSE = m.Pose(0.0, 0.0, 0.42)
 
 
 def variant(name: str, serial: str = "K001") -> m.Manifest:
@@ -183,7 +183,7 @@ def main() -> None:
     gnss.add_argument("--link", default=GNSS_LINK)
     gnss.add_argument("--lat", type=float, default=41.0)
     gnss.add_argument("--lon", type=float, default=29.0)
-    gnss.add_argument("--alt", type=float, default=2.1)
+    gnss.add_argument("--alt", type=float, default=1.7)
     gnss.add_argument("--rate", type=float, default=5.0)
     gnss.add_argument("--seed", type=int, default=0)
     caster = sub.add_parser("caster")

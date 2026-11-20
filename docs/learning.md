@@ -563,7 +563,9 @@ sayıyor, `/collision_truth`).
 
 ### 6g ✅: ağaç etrafı, kitin 360° kamerasıyla (sim, 2026-10-26)
 6f'nin önerisini dener: ağacı dönüş boyunca gören bir kamera. Kitin 360°
-kamerası (docs/kit-soketi.md) plakada, yerden 2,0 m'de; geri kalan her şey
+kamerası (docs/kit-soketi.md) plakada, yerden 2,0 m'de (2026-11-20'den beri
+kit kamerası 1,6 m'de; `edge_batch` artık `camera_z_offset:=1,42` ile üretir,
+6g'nin verisi ve sonuçları 2,0 m'dendir); geri kalan her şey
 6f'nin aynısı (uzman, sahalar 1–9 × 2 yön = 18 bölüm, 5 000 adım ACT, durum
 ivme + `edge.dir`, sahalar 20–22, 90 s).
 - **Sim kamerası:** `sim_camera.render_equirect` — birleştirilmiş 320×160
