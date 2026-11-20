@@ -29,9 +29,13 @@
 >   direğin dibi aynı anahtarlı yuvaya oturur.
 > - **Yükseklikler (yerden):** GNSS anteni **~1,7 m**, 360° kamera **~1,6 m**,
 >   LiDAR **~0,6 m** (önce 2,1 / 2,0 / 1,2 m). Ayrıntı aşağıda, "Soket — mekanik".
-> - **Açık:** v1/v2 ayrımı ve `gnss_link` (ESP32'siz kitte F9P'yi Pi okuyor)
->   K3'te orchadOS ile birlikte yeniden bakılacak. Kaynak: orchadOS
->   `docs/tarama-kiti.md` ve `docs/kit-siparis-listesi.md`.
+> - **Karar (kullanıcı, 2026-11-20): her kitte Pi ve LiDAR var.** Aşağıdaki
+>   LiDAR'sız v1 / LiDAR'lı v2 ayrımı kalkar; her kit bugünkü "v2" gibidir
+>   (Pi 4 + L2 + F9P + 360° kamera, ESP32 yok) ve çipinde üç frame de olur.
+>   Robot tarafında uyarlanacaklar K3'te: `fake_kit`'in v1 çeşitleri, kitin
+>   USB hub'ı yerine Pi üzerinden GNSS (`gnss_link`), kamerayı kimin sürdüğü.
+>   Şema 1 ve test vektörleri o zamana kadar aynen geçerli. Kaynak: orchadOS
+>   `docs/tarama-kiti.md`, `docs/arayuzler.md` ("Kit kimlik çipi").
 
 ## Kullanıcı kararları (2026-10-25)
 
