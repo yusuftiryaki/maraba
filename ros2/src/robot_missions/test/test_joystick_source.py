@@ -4,6 +4,7 @@ import errno
 import math
 import subprocess
 import sys
+import threading
 import types
 
 import pytest
@@ -369,13 +370,46 @@ def test_poller_periodic():
         p.stop()
 
 
-def test_poller_periodic_failure_is_unknown():
-    reads, got = _Reads(None), []
-    p = BatteryPoller(lambda: "AA", got.append, period_s=0.02, read=reads)
+def test_poller_periodic_failure_keeps_the_last_reading():
+    """BlueZ drops Battery1 as the link goes down, maybe before the evdev node
+    (and the MAC) is gone: a failed periodic read must not turn a known-low
+    battery into "unknown, allowed"."""
+    reads, got, logs = _Reads(18.0, None, None, 17.0), [], []
+    p = BatteryPoller(lambda: "AA", got.append, period_s=0.02, read=reads,
+                      log=logs.append)
     p.start()
     try:
-        assert _wait(lambda: _batteries(got)), got
-        assert math.isnan(_batteries(got)[0])
+        assert _wait(lambda: len(reads.macs) >= 4), reads.macs
+        assert _batteries(got)[:2] == [18.0, 17.0], got
+        assert not any(math.isnan(b) for b in _batteries(got)), got
+        assert any("keeping the last reading" in s for s in logs), logs
+    finally:
+        p.stop()
+
+
+def test_poller_does_not_lose_a_kick_that_lands_as_the_wait_times_out():
+    """kick() between wait() timing out and the clear must still poll now,
+    not a whole period_s later."""
+
+    class KickInWindow(threading.Event):
+        def __init__(self):
+            super().__init__()
+            self.first = True
+
+        def wait(self, timeout=None):
+            if self.first:
+                self.first = False
+                self.set()                      # the connect's kick lands here
+                return False                    # ...after wait() timed out
+            return super().wait(timeout)
+
+    reads, got = _Reads(None, 20.0), []
+    p = BatteryPoller(lambda: "AA", got.append, period_s=60.0, read=reads,
+                      retry_s=60.0)
+    p._wake = KickInWindow()
+    p.start()
+    try:
+        assert _wait(lambda: _batteries(got) == [20.0], timeout=1.0), got
     finally:
         p.stop()
 

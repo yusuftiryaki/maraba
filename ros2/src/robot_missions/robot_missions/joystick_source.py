@@ -207,7 +207,11 @@ class BatteryPoller:
     disconnect, so a known-low reading is kept rather than overwritten by
     "unknown". A read whose MAC changed while busctl ran is dropped. A failed
     read right after a connect is retried every retry_s, up to `retries`
-    times, before it is reported as unknown (NaN). Never raises.
+    times, before it is reported as unknown (NaN). A failed PERIODIC read is
+    only logged: the gate keeps its last reading. BlueZ drops Battery1 as the
+    link goes down, possibly before the evdev node (and so the MAC) is gone —
+    reporting NaN there would turn a known-low battery into "unknown,
+    allowed". Never raises.
     """
 
     def __init__(self, get_mac: Callable[[], Optional[str]],
@@ -246,20 +250,24 @@ class BatteryPoller:
         attempts = 0                        # > 0: attempts left after a kick
         while True:
             kicked = self._wake.wait(self._retry_s if attempts else self._period_s)
-            self._wake.clear()
+            if kicked:
+                # Only clear what we saw: clearing after a timeout would eat a
+                # kick() that landed between wait() returning and the clear.
+                self._wake.clear()
             if self._stop.is_set():
                 return
             if kicked:
                 attempts = self._retries + 1
+            after_connect = attempts > 0
             final = attempts <= 1
             try:
-                ok = self._poll_once(final)
+                ok = self._poll_once(after_connect, final)
             except Exception as e:          # keep the poller alive
                 self._log(f"battery poll failed: {e!r}")
                 ok = False
             attempts = 0 if ok or final else attempts - 1
 
-    def _poll_once(self, final: bool) -> bool:
+    def _poll_once(self, after_connect: bool, final: bool) -> bool:
         """True when done (read, or nothing to read); False to retry."""
         mac = self._get_mac()
         if not mac:
@@ -267,7 +275,13 @@ class BatteryPoller:
         pct = self._read(mac)
         if self._get_mac() != mac:
             return True                     # disconnected / replaced meanwhile
-        if pct is None and not final:
+        if pct is None:
+            if not after_connect:
+                self._log("periodic battery read failed; keeping the last reading")
+                return True
+            if not final:
+                return False
+            self._emit(JoyEvent("battery", "", math.nan))
             return False
-        self._emit(JoyEvent("battery", "", math.nan if pct is None else float(pct)))
-        return pct is not None
+        self._emit(JoyEvent("battery", "", float(pct)))
+        return True
