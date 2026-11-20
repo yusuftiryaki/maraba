@@ -13,6 +13,9 @@ FROM ros:jazzy-ros-base
 ARG DEBIAN_FRONTEND=noninteractive
 
 # --- Core dev + firmware toolchain -------------------------------------------
+# gh: GitHub CLI (noble's own package) — open PRs, watch CI (`gh pr checks
+# --watch`), merge. Login is per container: `gh auth login` (browser code);
+# the token lands in ~/.config/gh, which a rebuild does not keep.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential cmake git curl wget vim less \
       python3-pip python3-venv \
@@ -20,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       stlink-tools openocd \
       usbutils udev \
       python3-serial python3-smbus2 python3-shapely \
+      gh \
     && rm -rf /var/lib/apt/lists/*
 
 # --- ROS 2 packages central to the robot (trim if the image gets too big) ----
