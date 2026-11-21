@@ -54,6 +54,7 @@ def _pose(m) -> Tuple[float, ...]:
 
 EXTRACT = {
     "/cmd_vel_teleop": ("teleop", lambda m: (m.linear.x, m.angular.z)),
+    "/cmd_vel_joy": ("joystick", lambda m: (m.linear.x, m.angular.z)),
     "/cmd_vel_nav": ("nav", lambda m: (m.linear.x, m.angular.z)),
     "/cmd_vel": ("executed", lambda m: (m.linear.x, m.angular.z)),
     "/expert/cmd_vel": ("expert", lambda m: (m.linear.x, m.angular.z)),
@@ -201,7 +202,7 @@ def export(paths: List[str], out_dir: str, fps: float = 10.0, size=(320, 240),
             "state_names": list(STATE_NAMES), "action_names": list(ACTION_NAMES),
             "action_sources": list(SOURCES),
             "action_rule": "the command given in (t, t + 1/fps], else the latest still "
-                           "fresh (0.5 s); teleop outranks nav",
+                           "fresh (0.5 s); joystick outranks teleop outranks nav",
             "episodes": listed}
     with open(os.path.join(out_dir, "meta.json"), "w", encoding="utf-8") as handle:
         json.dump(meta, handle, indent=1, ensure_ascii=False)

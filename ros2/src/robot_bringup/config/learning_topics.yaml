@@ -36,10 +36,12 @@ learning_topics:
     - /diagnostics
     # actions and who gave them
     - /cmd_vel_teleop
+    - /cmd_vel_joy
     - /cmd_vel_nav
     - /cmd_vel_nav_gated
     - /cmd_vel
     - /teleop/state
+    - /joy/state
     - /nav_lock
     # context
     - /mission_runner/status

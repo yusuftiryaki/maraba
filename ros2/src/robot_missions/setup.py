@@ -27,6 +27,7 @@ setup(
             "mission_runner = robot_missions.mission_runner:main",
             "web_ui = robot_missions.web_ui:main",
             "jam_monitor = robot_missions.jam_monitor:main",
+            "joystick_teleop = robot_missions.joystick_teleop:main",
         ],
     },
 )

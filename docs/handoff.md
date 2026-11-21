@@ -652,8 +652,38 @@ kalır ve gerçek yığın her iki dünyada da devrededir.
 > `test_yaw_drifts_without_a_magnetometer` bunu kalıcı olarak belgeliyor.
 
 ## ŞU AN NEREDEYIZ / SIRADAKİ İŞ
-*(son güncelleme: 2026-11-12 — B1 flash sihirbazı + checklist düzeltmeleri; 2026-10-26 — kit soketi K1/K2 + #47/#48; 2026-10-18 — 5. aşama tasarımı + 5a web teleop; 2026-10-16 — görev katmanı 1. aşama; twist_mux (PR #5) ve
+*(son güncelleme: 2026-11-20 — Bluetooth kumanda; 2026-11-12 — B1 flash sihirbazı + checklist düzeltmeleri; 2026-10-26 — kit soketi K1/K2 + #47/#48; 2026-10-18 — 5. aşama tasarımı + 5a web teleop; 2026-10-16 — görev katmanı 1. aşama; twist_mux (PR #5) ve
 SP3–SP5; altındaki "A5'ten önceki durum" sayıları 2026-09-08'den)*
+
+### 🆕 Bluetooth kumanda (2026-11-20): `docs/superpowers/specs/2026-11-20-bluetooth-kumanda-design.md`
+Bahçede envanter taraması elle yapılsın diye VR-PARK BLE kumandayla sürüş
+(web teleop'a ek; varsayılan kapalı `use_joystick:=true`). Kod: `robot_missions`
+`joystick_gate.py` (ROS'suz kapı) + `joystick_source.py` (evdev + BlueZ pil) +
+`joystick_teleop.py` (düğüm); `robot_bringup/config/joystick.yaml`; twist_mux
+`joystick` girişi öncelik **110** (web 100'ün üstünde); web başlığında 🎮 rozeti;
+`robot_learning` `/cmd_vel_joy` karelerini `joystick` (insan sürüşü) etiketler.
+Canlılık kumandanın kendi `REL` akışından (BLE supervision timeout 6 s olduğu
+için Linux kopuşuna güvenilmez). Simülatörde: 0,2 m/s'de çubuk susunca ilk sıfır
+0,263 s, süzülme 0,072 m. Pi kurulumu `deployment.md` Adım 10, saha listesi
+`missions.md` 5a-ek.
+- **Açık işler:** (1) `A B C D` + tetik tuş kodları ölçülmedi → `speed_up/down_button`
+  boş. (2) Kumanda kapat-açınca / uykudan sonra `@+D` kalıyor mu — ölçülmedi.
+  (3) Gerçek durma mesafesi 0,6 m/s'de ölçülmedi (hedef < 0,25 m); Wi-Fi
+  birlikteliği menzili de. (4) Aralıklı test:
+  `test_disconnect_mid_drive_stops_and_reconnect_needs_rearm` "0,15 s içinde sıfır"
+  assert'i 14 koşuda 1 kez düştü (soğuk başlangıç, yeniden üretilemedi; hata
+  artık zaman çizelgesi basıyor) — tekrarlarsa araştır. (5) **B1 flash hâlâ
+  donanım darboğazı**; kumanda ondan bağımsız, ama gerçek tekerlek testi B1'e bağlı.
+- **Kapatılan takip işleri (birleştirme öncesi):** (a) `BatteryPoller`
+  kaçan-kick yarışı: zaman aşımında `_wake` artık temizlenmiyor. (b) Periyodik
+  pil okuması başarısız olursa NaN yazılmıyor, son okuma korunuyor (BLE
+  kopuşunda bilinen-düşük pil "bilinmiyor"a dönmesin; bu, Linux evdev düğümünü
+  geç silse bile pil bypass'ını kapatır). (c) Kumanda MAC'i artık repoda değil:
+  Pi'da `~/robot.env` → `MARABA_JOYSTICK_MAC`, `robot.service`
+  `EnvironmentFile`, `robot.launch.py` `joystick_mac` (Pi'da bir kez
+  `install_service.sh`). (d) BlueZ HoG'un kopuşta düğümü silip silmediği
+  hâlâ **sahada** gözlenecek (missions.md madde 7–8); artık yalnız `ARMED`
+  kalma davranışını etkiliyor, pili değil.
 
 ### 🆕 B1 flash sihirbazı (2026-11-12): `./scripts/b1_flash.sh`, `tools/b1_flash/`
 B1 donanım darboğazı olduğu için tezgah günü hazırlığı yapıldı (donanıma

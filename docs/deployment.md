@@ -230,6 +230,53 @@ uyarır). İçindekiler ve gerekçeleri dosyanın yorumlarında: `site_file`,
 8. **Kontrol:** `ros2 topic echo /kit/state --once` → kit takılıyken
    `"state": "READY"`, `"gps_source": "kit"` (robot dururken geçer).
 
+## Adım 10 — Bluetooth kumanda (`use_joystick:=true`; `docs/missions.md` 5a-ek)
+Elle sürüş için BLE kumanda (VR-PARK). Varsayılan **kapalı**; açmadan robot
+eskisi gibi davranır.
+1. **Paketler ve izin:**
+   ```
+   sudo apt install bluez python3-evdev
+   sudo usermod -aG input enes     # robot.service kullanıcısı (deploy/robot.service); oturumu kapat-aç / yeniden başlat
+   ```
+2. **Eşleştirme (bir kez)** — kumandayı uyandır, sonra:
+   ```
+   bluetoothctl
+   power on
+   agent on
+   scan on            # VR-PARK'ın MAC'ini bul
+   pair  <MAC>
+   trust <MAC>        # sonraki açılışlarda kendiliğinden bağlanır
+   connect <MAC>
+   ```
+   Bulduğun MAC'i Pi'da **`~/robot.env`** dosyasına yaz (büyük/küçük harf
+   fark etmez):
+   ```
+   echo 'MARABA_JOYSTICK_MAC=<MAC>' >> ~/robot.env
+   ```
+   Böylece yalnız **bu** kumanda sürer; aynı adlı başka bir cihaz eşleşmez
+   (tasarım kuralı 7: ad + MAC). `robot.service` bu dosyayı
+   `EnvironmentFile=-/home/enes/robot.env` ile okur, `robot.launch.py`'nin
+   `joystick_mac` argümanı varsayılanını oradan alır. MAC repoda hiçbir
+   dosyada durmaz, o yüzden `deploy.sh`'teki `git pull` hiçbir yerel
+   değişikliğe takılmaz. **Repodaki dosyaları (`joystick.yaml`) Pi'da
+   düzenleme.** Servis dosyası bu satırla güncellendi: Pi'da bir kez
+   `./scripts/install_service.sh` çalıştır. Dosya yoksa ya da satır boşsa
+   kumanda yalnız adıyla eşleşir (eski davranış).
+3. **Kumandayı `@ + D` (fare modu) yap — her açılışta.** Mod hafızası
+   ölçülmedi (missions.md kontrol listesi, madde 2). Yanlış modda robot
+   kıpırdamaz; durumda `mode_hint: "@+D?"` görünür.
+4. **robot.service:** `ExecStart` satırındaki `ros2 launch ...` komutuna
+   `use_joystick:=true` ekle, sonra `sudo systemctl daemon-reload && sudo systemctl restart robot`.
+5. **Kontrol:** `ros2 topic echo /joy/state --once` → `"connected": true`;
+   web başlığında 🎮 rozeti. Sürmek için arka tetiğe (`BTN_SIDE`) tıkla
+   (etkinleştir), çubuğu it.
+⚠️ Durma, Linux'un kopuşu fark etmesine **dayanmaz** (BLE supervision timeout
+6 s); canlılık kumandanın kendi `REL` akışından gelir. Simülatörde (en düşük
+kademe, 0,2 m/s) çubuk susunca `/cmd_vel`'deki **ilk sıfır 0,26 s**'de geldi;
+gerçek robotta durma süresi/mesafesi **henüz ölçülmedi** (missions.md 5a-ek
+saha kontrol listesi, madde 3–4). Sahada tekerlekler havadayken denemeden yere
+indirme.
+
 ## Sıra / bağımlılıklar
 1–2 (OS + ROS) donanımdan bağımsız, **hemen yapılabilir**. 3 ROS workspace'i
 gerektiriyor (sonraki adım). 4–5 (udev, I2C) donanım Pi'a bağlanınca. 7 (DDS)

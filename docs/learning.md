@@ -31,9 +31,11 @@ merkezinde; algoritma bugün seçilmiyor, kayıt ona bağlı değil.
    | topic | anlamı |
    |---|---|
    | `/cmd_vel_teleop` | operatörün niyeti (**birincil etiket**) |
+   | `/cmd_vel_joy` | Bluetooth kumandayla sürüş (insan sürüşü; mux'ta web'den önce, öncelik 110) |
    | `/cmd_vel_nav` | Nav2'nin önerisi (otonom bölümlerde etiket) |
    | `/cmd_vel` | mux'tan çıkan, köprüye giden |
    | `teleop/state` | o an kira var mı, teleop aktif mi (5a) |
+   | `joy/state` | kumanda bağlı/etkin/kademe/pil (JSON, 10 Hz) |
    | `nav_lock`, `bumper`, `diagnostics` (E-stop) | komutu kim engelledi |
    | `odom`, `joint_states` | tekerleğin gerçekte yaptığı |
 4. **Üç bölüm modu:** `demo` (operatör sürüyor), `intervention` (otonom görev
@@ -168,7 +170,7 @@ ros2 run robot_learning episode_export ~/episodes -o ~/dataset --fps 10 --image-
 | dosya | içerik |
 |---|---|
 | `meta.json` | fps, sütun adları (`state_names`, `action_names`, `action_sources`), aksiyon kuralı; bölüm başına görev, mod, sonuç, işaretler (**kare numarası**), teleop oranı, yazılım sürümü |
-| `episodes/episode_NNNNNN.npz` | `timestamp`, `state` (N×15, eksik = NaN), `action` (N×2 etiket), `action_source` (yok/teleop/nav), `action_executed` (`/cmd_vel`), `teleop` (insan tutuyordu), `image_age` |
+| `episodes/episode_NNNNNN.npz` | `timestamp`, `state` (N×15, eksik = NaN), `action` (N×2 etiket), `action_source` (yok/teleop/nav/joystick), `action_executed` (`/cmd_vel`), `teleop` (insan tutuyordu; kumanda da insan sayılır), `image_age` |
 | `videos/episode_NNNNNN.mp4` | satır başına bir kare (o andaki en son kamera karesi), mp4v |
 
 Kurallar (`dataset.py`, elle hesaplanmış testlerle):
@@ -186,6 +188,11 @@ hiçbiri burada yeni bağımlılık olmadan yazılamıyor (Noble apt'inde pyarro
 yok). npz + mp4 her yerde açılır; seçilen eğiticinin formatına dönüştürücü
 eğitim makinesinde küçük bir adım, ve bag kaynak olarak kalır — başka
 seçimlerle istendiği an yeniden dışa aktarılır.
+
+> 🎮 **Kumanda (2026-11-20):** `/cmd_vel_joy` taze ise kare `joystick`
+> (indeks 3) etiketi alır ve `teleop` = insan sürüyor; mux'taki gibi **web
+> teleop'tan önce** gelir (ikisi aynı anda tazeyse `joystick` kazanır).
+> Tasarım: `docs/superpowers/specs/2026-11-20-bluetooth-kumanda-design.md`.
 
 **Ölçülen** (`test_learning_stack.py`, kaydedilen gerçek bölüm): 68 kare (~70
 beklenen), `action` tam 0.30 m/s ve 0.5 rad/s, kaynak yalnız teleop/yok,

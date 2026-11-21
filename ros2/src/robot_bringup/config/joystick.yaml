@@ -1,0 +1,29 @@
+# joystick_teleop — Bluetooth remote (docs/superpowers/specs/2026-11-20-bluetooth-kumanda-design.md).
+# Output goes to /cmd_vel_joy -> twist_mux "joystick" (priority 110), never /cmd_vel.
+joystick_teleop:
+  ros__parameters:
+    device_name: "VR-PARK"
+    # Matched against evdev uniq (case-insensitive) together with the name
+    # (spec rule 7). robot.launch.py always overrides this with its
+    # joystick_mac argument, which defaults to $MARABA_JOYSTICK_MAC — on the
+    # robot that is set in ~/robot.env (docs/deployment.md Adım 10, step 2),
+    # so the per-robot MAC never sits in a tracked file. Leave "" here.
+    device_mac: ""
+    # Stick silent longer than this -> zero output (the human's deadman).
+    deadman_s: 0.25
+    # After the last stick event the node keeps publishing zeros this long,
+    # then goes silent so twist_mux hands the wheels back.
+    release_s: 2.0
+    arm_idle_s: 60.0
+    # Below this the remote refuses to arm / disarms.
+    min_battery_pct: 25.0
+    reverse_max: 0.2
+    linear_levels: [0.2, 0.4, 0.6]
+    angular_levels: [0.4, 0.7, 1.0]
+    invert_x: false
+    arm_button: "BTN_SIDE"
+    # Empty = no such button; fill in after measuring the remote.
+    speed_up_button: ""
+    speed_down_button: ""
+    # BlueZ battery: read right after every connect, then this often.
+    battery_poll_s: 30.0

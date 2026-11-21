@@ -505,6 +505,88 @@ WASD, hız sürgüsü (%10–100, tavanın oranı). Kod: `teleop.py` (kapı, ROS
   Headless Chromium'da da sürüldü (tuş, top, ikinci sekme reddi, JS hatası yok).
 - Testler: `test_teleop.py` (kapı, adım adım saat), `test_web_api.py` (HTTP).
 
+### 5a-ek: Bluetooth kumanda (2026-11-20)
+Bahçede envanter taraması elle: operatör robotun yanında yürür, **VR-PARK**
+BLE kumandayla sürer (web teleop'a **ek** bir giriş; kayıt işi telefonda).
+Tam tasarım ve gerekçeler:
+`docs/superpowers/specs/2026-11-20-bluetooth-kumanda-design.md`. Pi kurulumu:
+`docs/deployment.md` Adım 10. Varsayılan kapalı (`use_joystick:=true`).
+
+**Kurallar (özet):**
+- Kumanda `@+D` fare modunda; yalnız `REL_X/REL_Y` sürer (başka olay sürmez).
+  Çubuğun yalnız **işareti** kullanılır: orantı yok, sabit hız (kademeli).
+- Canlılık = son `REL` olayının yaşı: `deadman_s` (0,25 s) dolunca **sıfır**,
+  `release_s` (2 s) sonra susar → mux web'e/Nav2'ye döner. Linux'un "bağlantı
+  kopuk" bilgisine güvenilmez (BLE supervision timeout 6 s).
+- `DISARMED` başlar; arka tetik (`BTN_SIDE`) tıklaması etkinleştirir/kapatır.
+  Kopuş, 60 s `REL` yokluğu veya pil < %25 → kendiliğinden `DISARMED`;
+  çubuk itiliyken etkinleştirme reddedilir; kapanırken önce 2 s sıfır.
+- Pil (BlueZ) her bağlanışta **hemen**, sonra 30 s'de bir okunur (kumandayı
+  kapat-aç düşük pil reddini atlatmasın). Okunamazsa sürüş serbest, rozette
+  `pil ?` uyarısı.
+- Kademeler 0,2 / 0,4 / 0,6 m/s (dönüş 0,4 / 0,7 / 1,0 rad/s), her etkinleştirmede
+  en düşük; geri en çok 0,2 m/s.
+- `/cmd_vel_joy` → twist_mux `joystick` (öncelik **110**, web 100'ün üstünde);
+  `/cmd_vel`'e doğrudan yazmaz, alt katmanlar (köprü 0,5 s, ESP32 200 ms, E-stop,
+  tampon) aynen geçerli.
+- Öğrenme verisinde kumanda sürüşü **insan sürüşü**dür (`action_source` = `joystick`).
+
+**Tuşlar:** arka tetik = etkinleştir/kapat. Hız +/− tuşları **henüz atanmadı**
+(`robot_bringup/config/joystick.yaml`: `speed_up_button` / `speed_down_button`
+boş; saha kontrol listesi madde 1). Başlıkta 🎮 rozeti: bağlı / etkin / kademe / pil.
+
+**Ölçülen (gerçek kumanda, kullanıcının bilgisayarı, 2026-11-20):**
+| Ölçülen | Değer | Sonuç |
+|---|---|---|
+| BLE supervision timeout | **6000 ms** | Linux kopuşu 3–10 s geç fark eder → güvenlik buna dayanamaz |
+| `@+D` fare modu, çubuk itili | `REL_Y = -17` her **~30 ms**, en uzun aralık 37 ms; yarım/tam itiş aynı | Orantı yok; kumandanın düzenli akışı canlılık kanıtı |
+| `@+B` müzik modu | `KEY_PREVIOUSSONG` + `value 2` | Kernel otomatik tekrarı kopuşta da sürer — elendi |
+| `@+C` yön tuşu modu | `ABS_HAT0X/Y`, yalnız değişimde | Sabitken akış yok — elendi |
+| Arka tetik (`@+D`) | `BTN_SIDE` 1 → 30 ms sonra 0 | Tıklama; ölü adam tuşu olamaz |
+| Uyku | ~5–10 dk dokunulmazsa | Bağlantı düşer → robot durur; uyandırınca yeniden etkinleştir |
+
+**Ölçülen (simülatör yığını, `test_joystick_stack.py`, gerçek mux + köprü + kinematik dünya, en düşük kademe 0,2 m/s):**
+3 sn'de 0,576 m; çubuk susunca `/cmd_vel`'de ilk sıfır **0,263 s**; robot
+**0,072 m** süzülüyor. Tam kademe (0,6 m/s) için gerçek durma mesafesi **ölçülmedi**.
+⚠️ Bilinen aralıklı: `test_disconnect_mid_drive_stops_and_reconnect_needs_rearm`
+içindeki "kopuştan 0,15 s içinde sıfır" assert'i 14 koşuda 1 kez düştü (soğuk
+başlangıç, yeniden üretilemedi; hata mesajı artık zaman çizelgesi basıyor).
+
+**Bilinen davranış:** fare modunda "çubuk ortada" ile "6 s'den kısa kopuş"
+ayırt edilemez; Linux cihazı silmezse düğüm `ARMED` kalır ve çubuk hâlâ itiliyorsa
+robot yeniden yürür (arada ölü adam durdurmuştur). Sahada gözlenecek.
+Pil açısından bu durum güvenli tarafta: Linux cihazı geç silse (ya da hiç
+silmese) bile BlueZ'in `Battery1`'i düşürmesiyle başarısız olan **periyodik**
+okuma "bilinmiyor" yazmaz, kapı son bilinen pili tutar (bilinen-düşük pil
+kopuşla "bilinmiyor, izinli"ye dönmez). "Bilinmiyor" yalnız bağlanma sonrası
+3 deneme de başarısızsa yazılır.
+
+**Saha kontrol listesi** (Pi, kumanda eşleşmiş, `use_joystick:=true`):
+- [ ] 1. Fare modunda `A B C D` ve iki tetiğin `evtest` kodlarını ölç →
+  `joystick.yaml` `speed_up_button` / `speed_down_button`.
+- [ ] 2. Kumandayı kapat-aç → hâlâ `@+D` mi? Uykudan uyanınca?
+- [ ] 3. Tekerlekler havada: etkinleştir, ileri sür; kumandayı **kapat** →
+  tekerlek ≤ 0,25 s + köprü içinde duruyor mu?
+- [ ] 4. Yerde, en yüksek kademe (0,6 m/s): kumandayı kapat; ayrıca menzil
+  dışına yürü → durma mesafesini ölç (hedef < 0,25 m).
+- [ ] 5. Wi-Fi açıkken menzil (Pi 4'te BT ile aynı çip).
+- [ ] 6. Pil `%25` altında etkinleştirme reddi (rozette görünür).
+- [ ] 7. Kumanda **uykuya** düşsün (ya da kapat-aç): robot duruyor mu,
+  rozet "bağlı değil" mi? Uyanınca çubuk itilince robot **kıpırdamamalı** —
+  arka tetikle yeniden etkinleştirme gerekir.
+- [ ] 8. Bilinen davranışı gözle (kısa radyo boşluğu, yukarıda): etkin + çubuk
+  itiliyken kumandayı bir an menzil dışına / gövde arkasına al → ölü adam
+  durduruyor mu, bağlantı Linux cihazı silmeden dönünce robot yeniden yürüyor
+  mu? Gördüğünü buraya yaz.
+- [ ] 9. Her saha gününden önce kumandaya **taze pil** tak (rozette pil %;
+  `pil ?` görünürse pil okunamıyor demektir, düşük pil reddi çalışmaz).
+- [ ] 10. `/proc/bus/input/devices`'ta kumandanın adı `joystick.yaml`
+  `device_name` (`VR-PARK`) ile birebir aynı mı? `Uniq=` satırı
+  `~/robot.env`'deki `MARABA_JOYSTICK_MAC` ile aynı mı
+  (`ros2 param get /joystick_teleop device_mac`)? Tüm tuşlar (`BTN_SIDE`,
+  hız tuşları) `REL` gösteren **aynı** `event` düğümünde mi (`evtest` ile)?
+  Değilse o tuşlar yok sayılır — düğüm yalnız `REL`'li düğümü okur.
+
 ### ✅ 5b: sınır, rota, istasyon, etiketli nokta (2026-10-18)
 "Sür" sekmesinin altında **Öğret**: iz (alan / girilmez / rota) başlat → sür →
 "Köşe bırak" (isteğe bağlı) → Bitir; nokta (istasyon / etiketli nokta / engel)
